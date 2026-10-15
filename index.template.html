@@ -1,0 +1,257 @@
+<title>Etendue Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: optical bench. Controls rail on the left, one large ray stage on top, readouts and charts underneath. */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --panel2: #e6ebf0; --stage: #f8fafb;
+  --ink: #14212b; --muted: #566877; --line: #d2dae1; --grid: #dfe5ea;
+  --accent: #0b6f8e; --accent-ink: #ffffff; --sun: #b87800;
+  --glass: #2f86a8; --led: #ff8a1f;
+  --good: #1c8a5a; --warn: #b3600a; --lost: #c43d28; --lost2: #8a3fb5;
+  --r0: #e0401f; --r1: #e8830f; --r2: #b09600; --r3: #1c9582; --r4: #3a62d0;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1117; --panel: #111b24; --panel2: #18252f; --stage: #070c11;
+    --ink: #e5edf3; --muted: #8da1b1; --line: #233341; --grid: #15222c;
+    --accent: #4fc1e0; --accent-ink: #06222b; --sun: #ffc83d;
+    --glass: #6cc3e3; --led: #ffb347;
+    --good: #4cc38a; --warn: #f0a23b; --lost: #ff6b5a; --lost2: #c58cf0;
+    --r0: #ff5a36; --r1: #ffa133; --r2: #ece04a; --r3: #4fd0b4; --r4: #6f95ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a1117; --panel: #111b24; --panel2: #18252f; --stage: #070c11;
+  --ink: #e5edf3; --muted: #8da1b1; --line: #233341; --grid: #15222c;
+  --accent: #4fc1e0; --accent-ink: #06222b; --sun: #ffc83d;
+  --glass: #6cc3e3; --led: #ffb347;
+  --good: #4cc38a; --warn: #f0a23b; --lost: #ff6b5a; --lost2: #c58cf0;
+  --r0: #ff5a36; --r1: #ffa133; --r2: #ece04a; --r3: #4fd0b4; --r4: #6f95ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+.wrap { max-width: 1500px; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 16px; }
+h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.app { display: grid; grid-template-columns: minmax(300px, 350px) minmax(0, 1fr); grid-template-areas: "side main"; gap: 18px; align-items: start; }
+aside { grid-area: side; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+main { grid-area: main; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (max-width: 980px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "side"; }
+}
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.card h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-family: var(--font-mono); }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* presets */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip, .btn {
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer;
+}
+.chip:hover, .btn:hover { border-color: var(--accent); }
+.chip:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel2); border: 0; padding: 5px 9px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* controls */
+.ctl { display: grid; gap: 3px; margin-top: 9px; }
+.ctl:first-of-type { margin-top: 0; }
+.ctl label { font-size: 12.5px; color: var(--ink); display: flex; justify-content: space-between; gap: 8px; }
+.ctl-row { display: grid; grid-template-columns: minmax(0, 1fr) 74px 28px; gap: 8px; align-items: center; }
+.unit { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; min-width: 0; }
+input[type="number"], select {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 5px; padding: 3px 6px; width: 100%; min-width: 0;
+}
+input[type="number"] { font-family: var(--font-mono); text-align: right; }
+select { margin-top: 2px; }
+.lens-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.lens-head h2 { margin: 0; }
+.lens-head label { font-size: 12.5px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.lens-body[hidden] { display: none !important; }
+.chk { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 12.5px; cursor: pointer; }
+.ctl[hidden] { display: none !important; }
+#domeBox { margin-top: 6px; }
+
+/* stage */
+.stage-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.stage-bar .grow { flex: 1; }
+.stage-wrap { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--stage); }
+#stage { display: block; width: 100%; height: clamp(300px, 46vw, 460px); touch-action: none; cursor: grab; }
+#stage.drag { cursor: grabbing; }
+.warns { margin: 8px 0 0; padding: 0; list-style: none; color: var(--warn); font-size: 12.5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+
+/* kpis */
+#kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.kpi .k { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-family: var(--font-mono); }
+.kpi .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 2px; }
+.kpi .v small { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.kpi .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.bar { position: relative; height: 8px; border-radius: 4px; background: var(--panel2); margin-top: 8px; overflow: visible; }
+.bar > b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.bar > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--sun); text-decoration: none; }
+
+/* panels */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+canvas.chart { display: block; width: 100%; height: 170px; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.pair h3 { margin: 0 0 2px; font-size: 12.5px; font-weight: 500; }
+.split { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--panel2); margin: 4px 0 8px; }
+.split span { display: block; height: 100%; }
+dl.rows { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; margin: 8px 0 0; font-size: 13px; }
+dl.rows dt { color: var(--muted); }
+dl.rows dd { margin: 0; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sweepbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.sweepbar select { width: auto; margin: 0; }
+.sweepgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.sweepgrid canvas { height: 150px; }
+ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+ul.notes li { max-width: 80ch; }
+.assist b, .notes b { font-weight: 600; }
+.tiny { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .bar > b { transition: width 0.15s ease; } }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Etendue Bench</h1>
+  <p>Trace a Lambertian LED through up to three lenses. Watch where the light goes, how sharp the beam gets, and why brightness stops growing.</p>
+</header>
+
+<div class="app">
+<main>
+  <section class="card">
+    <div class="stage-bar">
+      <button class="btn" id="fitOptics">Fit optics</button>
+      <button class="btn" id="fitLed">Zoom to LED</button>
+      <button class="btn" id="fitWall">Show wall</button>
+      <span class="grow"></span>
+      <span class="tiny">Rays</span>
+      <div class="seg" role="group" aria-label="Ray colour">
+        <button id="cmLed" aria-pressed="true">By LED point</button>
+        <button id="cmFate" aria-pressed="false">By fate</button>
+      </div>
+    </div>
+    <div class="stage-wrap"><canvas id="stage" aria-label="Ray diagram. Drag to pan, scroll to zoom, double-click to fit."></canvas></div>
+    <ul class="warns" id="warns"></ul>
+    <div class="legend" id="legend"></div>
+    <p class="hint">Drag to pan, scroll to zoom, double-click to fit. Both axes share one scale in millimetres. Rays are drawn from five points across the LED.</p>
+  </section>
+
+  <section id="kpis" aria-live="polite"></section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Light budget</h2>
+      <div id="budget"></div>
+    </section>
+    <section class="card">
+      <h2>Source seen through the lens</h2>
+      <canvas class="chart" id="appChart" aria-label="Angular size of the LED as seen through the lens compared with the sun"></canvas>
+      <div id="appText" class="hint"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Beam cross-section (2D slice)</h2>
+    <div class="pair">
+      <div><h3>Right after the last lens</h3><canvas class="chart" id="profExit" aria-label="Beam profile after the last lens"></canvas></div>
+      <div><h3 id="wallTitle">On the wall</h3><canvas class="chart" id="profWall" aria-label="Beam profile on the wall"></canvas></div>
+    </div>
+    <div id="profText" class="hint"></div>
+  </section>
+
+  <section class="card">
+    <h2>Sweep one parameter</h2>
+    <div class="sweepbar">
+      <span class="tiny">Vary</span>
+      <select id="sweepVar" aria-label="Parameter to sweep">
+        <option value="f">Lens 1 focal length</option>
+        <option value="D">Lens 1 diameter</option>
+        <option value="led">LED diameter</option>
+      </select>
+      <span class="tiny">Everything else stays as set. The dot marks where you are now.</span>
+    </div>
+    <div class="sweepgrid">
+      <canvas class="chart" id="swEta"></canvas>
+      <canvas class="chart" id="swAng"></canvas>
+      <canvas class="chart" id="swLux"></canvas>
+      <canvas class="chart" id="swPen"></canvas>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rules of thumb from the numbers</h2>
+    <ul class="notes" id="notes"></ul>
+    <p class="tiny" style="margin-top:10px">Method: meridional ray trace with Snell refraction and unpolarised reflection loss (Fresnel equations) at every glass surface. Efficiency, lux and luminance use a round LED and round lenses, estimated from the same rays. Sun reference: 100 klx, 0.53° across, 1.6 Gcd/m².</p>
+  </section>
+</main>
+
+<aside>
+  <section class="card">
+    <h2>Presets</h2>
+    <div class="chips" id="presets"></div>
+  </section>
+
+  <section class="card">
+    <h2>LED (Lambertian)</h2>
+    <div id="ledCtl"></div>
+    <label class="chk"><input type="checkbox" id="domeOn"> Domed LED (integrated lens)</label>
+    <div id="domeBox" hidden></div>
+    <p class="hint mono" id="ledInfo"></p>
+  </section>
+
+  <section class="card">
+    <h2>Lens material</h2>
+    <select id="material" aria-label="Lens material"></select>
+  </section>
+
+  <section class="card" id="lens1"></section>
+  <section class="card" id="lens2"></section>
+  <section class="card" id="lens3"></section>
+
+  <section class="card">
+    <h2>Wall</h2>
+    <div id="wallCtl"></div>
+  </section>
+
+  <section class="card assist">
+    <h2>Focal length helper</h2>
+    <div id="assistCtl"></div>
+    <div id="assistOut" class="hint"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
+      <button class="btn primary" id="setF">Set f₁ from this angle</button>
+      <button class="btn" id="setSun">Use the sun’s 0.53°</button>
+    </div>
+  </section>
+</aside>
+</div>
+</div>
+
+<script>
+/*ENGINE*/
+</script>
+<script>
+/*APP*/
+</script>

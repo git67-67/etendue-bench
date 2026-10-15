@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}</style>
+<title>Etendue Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: optical bench. Controls rail on the left, one large ray stage on top, readouts and charts underneath. */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --panel2: #e6ebf0; --stage: #f8fafb;
+  --ink: #14212b; --muted: #566877; --line: #d2dae1; --grid: #dfe5ea;
+  --accent: #0b6f8e; --accent-ink: #ffffff; --sun: #b87800;
+  --glass: #2f86a8; --led: #ff8a1f;
+  --good: #1c8a5a; --warn: #b3600a; --lost: #c43d28; --lost2: #8a3fb5;
+  --r0: #e0401f; --r1: #e8830f; --r2: #b09600; --r3: #1c9582; --r4: #3a62d0;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1117; --panel: #111b24; --panel2: #18252f; --stage: #070c11;
+    --ink: #e5edf3; --muted: #8da1b1; --line: #233341; --grid: #15222c;
+    --accent: #4fc1e0; --accent-ink: #06222b; --sun: #ffc83d;
+    --glass: #6cc3e3; --led: #ffb347;
+    --good: #4cc38a; --warn: #f0a23b; --lost: #ff6b5a; --lost2: #c58cf0;
+    --r0: #ff5a36; --r1: #ffa133; --r2: #ece04a; --r3: #4fd0b4; --r4: #6f95ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a1117; --panel: #111b24; --panel2: #18252f; --stage: #070c11;
+  --ink: #e5edf3; --muted: #8da1b1; --line: #233341; --grid: #15222c;
+  --accent: #4fc1e0; --accent-ink: #06222b; --sun: #ffc83d;
+  --glass: #6cc3e3; --led: #ffb347;
+  --good: #4cc38a; --warn: #f0a23b; --lost: #ff6b5a; --lost2: #c58cf0;
+  --r0: #ff5a36; --r1: #ffa133; --r2: #ece04a; --r3: #4fd0b4; --r4: #6f95ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+.wrap { max-width: 1500px; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 16px; }
+h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.app { display: grid; grid-template-columns: minmax(300px, 350px) minmax(0, 1fr); grid-template-areas: "side main"; gap: 18px; align-items: start; }
+aside { grid-area: side; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+main { grid-area: main; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (max-width: 980px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "side"; }
+}
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.card h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-family: var(--font-mono); }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* presets */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip, .btn {
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer;
+}
+.chip:hover, .btn:hover { border-color: var(--accent); }
+.chip:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel2); border: 0; padding: 5px 9px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* controls */
+.ctl { display: grid; gap: 3px; margin-top: 9px; }
+.ctl:first-of-type { margin-top: 0; }
+.ctl label { font-size: 12.5px; color: var(--ink); display: flex; justify-content: space-between; gap: 8px; }
+.ctl-row { display: grid; grid-template-columns: minmax(0, 1fr) 74px 28px; gap: 8px; align-items: center; }
+.unit { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; min-width: 0; }
+input[type="number"], select {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 5px; padding: 3px 6px; width: 100%; min-width: 0;
+}
+input[type="number"] { font-family: var(--font-mono); text-align: right; }
+select { margin-top: 2px; }
+.lens-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.lens-head h2 { margin: 0; }
+.lens-head label { font-size: 12.5px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.lens-body[hidden] { display: none !important; }
+.chk { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 12.5px; cursor: pointer; }
+.ctl[hidden] { display: none !important; }
+#domeBox { margin-top: 6px; }
+
+/* stage */
+.stage-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.stage-bar .grow { flex: 1; }
+.stage-wrap { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--stage); }
+#stage { display: block; width: 100%; height: clamp(300px, 46vw, 460px); touch-action: none; cursor: grab; }
+#stage.drag { cursor: grabbing; }
+.warns { margin: 8px 0 0; padding: 0; list-style: none; color: var(--warn); font-size: 12.5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+
+/* kpis */
+#kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.kpi .k { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-family: var(--font-mono); }
+.kpi .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 2px; }
+.kpi .v small { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.kpi .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.bar { position: relative; height: 8px; border-radius: 4px; background: var(--panel2); margin-top: 8px; overflow: visible; }
+.bar > b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.bar > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--sun); text-decoration: none; }
+
+/* panels */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+canvas.chart { display: block; width: 100%; height: 170px; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.pair h3 { margin: 0 0 2px; font-size: 12.5px; font-weight: 500; }
+.split { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--panel2); margin: 4px 0 8px; }
+.split span { display: block; height: 100%; }
+dl.rows { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; margin: 8px 0 0; font-size: 13px; }
+dl.rows dt { color: var(--muted); }
+dl.rows dd { margin: 0; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sweepbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.sweepbar select { width: auto; margin: 0; }
+.sweepgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.sweepgrid canvas { height: 150px; }
+ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+ul.notes li { max-width: 80ch; }
+.assist b, .notes b { font-weight: 600; }
+.tiny { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .bar > b { transition: width 0.15s ease; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Etendue Bench</h1>
+  <p>Trace a Lambertian LED through up to three lenses. Watch where the light goes, how sharp the beam gets, and why brightness stops growing.</p>
+</header>
+
+<div class="app">
+<main>
+  <section class="card">
+    <div class="stage-bar">
+      <button class="btn" id="fitOptics">Fit optics</button>
+      <button class="btn" id="fitLed">Zoom to LED</button>
+      <button class="btn" id="fitWall">Show wall</button>
+      <span class="grow"></span>
+      <span class="tiny">Rays</span>
+      <div class="seg" role="group" aria-label="Ray colour">
+        <button id="cmLed" aria-pressed="true">By LED point</button>
+        <button id="cmFate" aria-pressed="false">By fate</button>
+      </div>
+    </div>
+    <div class="stage-wrap"><canvas id="stage" aria-label="Ray diagram. Drag to pan, scroll to zoom, double-click to fit."></canvas></div>
+    <ul class="warns" id="warns"></ul>
+    <div class="legend" id="legend"></div>
+    <p class="hint">Drag to pan, scroll to zoom, double-click to fit. Both axes share one scale in millimetres. Rays are drawn from five points across the LED.</p>
+  </section>
+
+  <section id="kpis" aria-live="polite"></section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Light budget</h2>
+      <div id="budget"></div>
+    </section>
+    <section class="card">
+      <h2>Source seen through the lens</h2>
+      <canvas class="chart" id="appChart" aria-label="Angular size of the LED as seen through the lens compared with the sun"></canvas>
+      <div id="appText" class="hint"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Beam cross-section (2D slice)</h2>
+    <div class="pair">
+      <div><h3>Right after the last lens</h3><canvas class="chart" id="profExit" aria-label="Beam profile after the last lens"></canvas></div>
+      <div><h3 id="wallTitle">On the wall</h3><canvas class="chart" id="profWall" aria-label="Beam profile on the wall"></canvas></div>
+    </div>
+    <div id="profText" class="hint"></div>
+  </section>
+
+  <section class="card">
+    <h2>Sweep one parameter</h2>
+    <div class="sweepbar">
+      <span class="tiny">Vary</span>
+      <select id="sweepVar" aria-label="Parameter to sweep">
+        <option value="f">Lens 1 focal length</option>
+        <option value="D">Lens 1 diameter</option>
+        <option value="led">LED diameter</option>
+      </select>
+      <span class="tiny">Everything else stays as set. The dot marks where you are now.</span>
+    </div>
+    <div class="sweepgrid">
+      <canvas class="chart" id="swEta"></canvas>
+      <canvas class="chart" id="swAng"></canvas>
+      <canvas class="chart" id="swLux"></canvas>
+      <canvas class="chart" id="swPen"></canvas>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rules of thumb from the numbers</h2>
+    <ul class="notes" id="notes"></ul>
+    <p class="tiny" style="margin-top:10px">Method: meridional ray trace with Snell refraction and unpolarised reflection loss (Fresnel equations) at every glass surface. Efficiency, lux and luminance use a round LED and round lenses, estimated from the same rays. Sun reference: 100 klx, 0.53° across, 1.6 Gcd/m².</p>
+  </section>
+</main>
+
+<aside>
+  <section class="card">
+    <h2>Presets</h2>
+    <div class="chips" id="presets"></div>
+  </section>
+
+  <section class="card">
+    <h2>LED (Lambertian)</h2>
+    <div id="ledCtl"></div>
+    <label class="chk"><input type="checkbox" id="domeOn"> Domed LED (integrated lens)</label>
+    <div id="domeBox" hidden></div>
+    <p class="hint mono" id="ledInfo"></p>
+  </section>
+
+  <section class="card">
+    <h2>Lens material</h2>
+    <select id="material" aria-label="Lens material"></select>
+  </section>
+
+  <section class="card" id="lens1"></section>
+  <section class="card" id="lens2"></section>
+  <section class="card" id="lens3"></section>
+
+  <section class="card">
+    <h2>Wall</h2>
+    <div id="wallCtl"></div>
+  </section>
+
+  <section class="card assist">
+    <h2>Focal length helper</h2>
+    <div id="assistCtl"></div>
+    <div id="assistOut" class="hint"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
+      <button class="btn primary" id="setF">Set f₁ from this angle</button>
+      <button class="btn" id="setSun">Use the sun’s 0.53°</button>
+    </div>
+  </section>
+</aside>
+</div>
+</div>
+
+<script>
+/* Etendue Bench: 2D meridional ray tracer for an LED + up to three lenses.
+   Units: mm, degrees for output angles, lumens, lux. */
+(function (root) {
+  'use strict';
+
+  const SUN = { lux: 100000, lum: 1.6e9, angDeg: 0.533, penumbraMmPerM: 9.3 };
+  const MATERIALS = [
+    { id: 'pmma', name: 'PMMA acrylic (n 1.49)', n: 1.49 },
+    { id: 'bk7', name: 'BK7 glass (n 1.517)', n: 1.517 },
+    { id: 'pc', name: 'Polycarbonate (n 1.585)', n: 1.585 },
+    { id: 'sf', name: 'Dense flint glass (n 1.80)', n: 1.8 }
+  ];
+  const KINDS = [
+    { id: 'asphC', name: 'Aspheric plano-convex, curved side to LED' },
+    { id: 'asphF', name: 'Aspheric plano-convex, flat side to LED' },
+    { id: 'sphC', name: 'Spherical plano-convex, curved side to LED' },
+    { id: 'sphF', name: 'Spherical plano-convex, flat side to LED' },
+    { id: 'biconvex', name: 'Spherical biconvex' },
+    { id: 'concF', name: 'Plano-concave, flat side to LED' },
+    { id: 'concC', name: 'Plano-concave, concave side to LED' },
+    { id: 'biconcave', name: 'Spherical biconcave' },
+    { id: 'ball', name: 'Ball lens (full sphere)' },
+    { id: 'fresnelF', name: 'Fresnel, flat side to LED, grooves facing out' },
+    { id: 'fresnelC', name: 'Fresnel, grooves facing the LED' },
+    { id: 'ideal', name: 'Ideal thin convex lens (no aberration, no loss)' },
+    { id: 'idealNeg', name: 'Ideal thin concave lens (no aberration, no loss)' }
+  ];
+  const NEG = { concF: 1, concC: 1, biconcave: 1, idealNeg: 1 };
+  const DOME_MATERIALS = [
+    { n: 1.41, name: 'Silicone (n 1.41)' },
+    { n: 1.53, name: 'Epoxy (n 1.53)' },
+    { n: 1.49, name: 'PMMA (n 1.49)' },
+    { n: 1.585, name: 'Polycarbonate (n 1.585)' }
+  ];
+
+  const A1 = 0.7548776662466927, A2 = 0.5698402909980532;
+  const frac = (x) => x - Math.floor(x);
+
+  function sagFn(c, k, y) {
+    const q = 1 - (1 + k) * c * c * y * y;
+    return q <= 0 ? NaN : (c * y * y) / (1 + Math.sqrt(q));
+  }
+
+  const sgn = (c) => (c < 0 ? -1 : 1);
+  const sagAbs = (c, k, y) => (c === 0 ? 0 : sagFn(Math.abs(c), k, y));
+
+  /* Surface curvatures (signed, positive = centre of curvature on the exit side), thickness
+     and principal planes for each lens kind. */
+  function lensGeom(kind, f, hIn, n, pitchIn, warns, idx) {
+    const a = n - 1, EDGE = 1.5, MINC = 1.0, af = Math.max(0.5, Math.abs(f));
+    let c1 = 0, c2 = 0, k1 = 0, k2 = 0, h = hIn, fres = 0, t = 0;
+    const kk = (kind.startsWith('asph') || kind.startsWith('fresnel')) ? -n * n : 0;
+    const pitch = Math.max(0.05, pitchIn || 0.5, hIn / 200);
+    if (kind === 'asphC' || kind === 'sphC' || kind === 'fresnelC') { c1 = 1 / (af * a); k1 = kk; }
+    else if (kind === 'asphF' || kind === 'sphF' || kind === 'fresnelF') { c2 = -1 / (af * a); k2 = kk; }
+    else if (kind === 'concF') c2 = 1 / (af * a);
+    else if (kind === 'concC') c1 = -1 / (af * a);
+    if (kind === 'fresnelC') fres = 1;
+    if (kind === 'fresnelF') fres = 2;
+    const limit = () => {
+      for (const [c, k] of [[c1, k1], [c2, k2]]) {
+        if (c === 0) continue;
+        const q = 1 - (1 + k) * c * c * h * h;
+        if (q <= 0.0004) {
+          h = Math.sqrt(0.96 / ((1 + k) * c * c));
+          warns.push('Lens ' + idx + ': diameter is too large for this focal length. The surface would curve past a hemisphere, so the aperture is clipped to ' + (2 * h).toFixed(1) + ' mm.');
+        }
+      }
+    };
+    const thick = () => {
+      const S1 = fres === 1 ? sagAbs(c1, k1, h) - sagAbs(c1, k1, Math.max(0, h - pitch)) : sagAbs(c1, k1, h);
+      const S2 = fres === 2 ? sagAbs(c2, k2, h) - sagAbs(c2, k2, Math.max(0, h - pitch)) : sagAbs(c2, k2, h);
+      return Math.max(MINC, EDGE + sgn(c1) * S1 - sgn(c2) * S2);
+    };
+    if (kind === 'ball') {
+      const R = hIn; c1 = 1 / R; c2 = -1 / R; h = 0.99 * R; t = 2 * R;
+    } else if (kind === 'biconvex' || kind === 'biconcave') {
+      const conv = kind === 'biconvex'; let R = 2 * a * af;
+      for (let i = 0; i < 10; i++) {
+        c1 = conv ? 1 / R : -1 / R; c2 = -c1;
+        const hh = Math.min(h, 0.97 * R); t = Math.max(MINC, EDGE + sgn(c1) * sagAbs(c1, 0, hh) - sgn(c2) * sagAbs(c2, 0, hh));
+        const d = conv ? (a * af) * (a * af) - t * a * a * af / n : (a * af) * (a * af) + t * a * a * af / n;
+        if (d < 0) { warns.push('Lens ' + idx + ': this focal length is too short for a biconvex lens of this thickness.'); break; }
+        R = a * af + Math.sqrt(d);
+      }
+      limit(); t = thick();
+    } else if (kind !== 'ideal' && kind !== 'idealNeg') { limit(); t = thick(); }
+    const P1 = a * c1, P2 = -a * c2, P = P1 + P2 - (t / n) * P1 * P2;
+    const fEff = Math.abs(P) > 1e-9 ? 1 / P : 1e9;
+    return { c1: c1, c2: c2, k1: k1, k2: k2, t: t, h: h, fres: fres, pitch: pitch, fEff: fEff,
+             hObj: -fEff * a * t * c2 / n, hPrime: fEff * a * t * c1 / n };
+  }
+
+  function profile(c, k, y, fres, pitch) {
+    if (c === 0) return 0;
+    const s = sagAbs(c, k, y);
+    return fres ? s - sagAbs(c, k, Math.floor(Math.abs(y) / pitch) * pitch) : s;
+  }
+
+  /* Build the optical surface list from the parameter set. */
+  function buildSystem(p) {
+    const n = p.n, s = [], polys = [], warns = [], info = [];
+    let zBack = 0, hPrime = 0, fPrev = 0, first = true, zLast = 0.5, hLast = Math.max(1, p.ledD / 2), domeOn = false, zMin = 0;
+    const dm = p.dome;
+    if (dm && dm.on) {
+      const Rd = Math.max(0.2, dm.R), H = Math.max(0.1, dm.hr * Rd), zc = H - Rd;
+      const base = zc > 0 ? Rd : Math.sqrt(Math.max(1e-6, 2 * Rd * H - H * H));
+      const hd = base * 0.9995;
+      if (p.ledD / 2 > hd * 0.98) warns.push('The LED emitter is wider than the dome base. Make the dome bigger or the emitter smaller.');
+      s.push({ type: 0, dome: true, z: H, c: 1 / Rd, k: 0, sgn: -1, h: hd, n1: dm.n, n2: 1, zc: zc, wallY: base });
+      const pts = [[0, -hd]];
+      if (zc > 0) pts.push([zc, -base]);
+      for (let i = 0; i <= 48; i++) { const y = -hd + 2 * hd * i / 48; pts.push([H - sagFn(1 / Rd, 0, y), y]); }
+      if (zc > 0) pts.push([zc, base]);
+      pts.push([0, hd]);
+      polys.push({ dome: true, loop: pts });
+      domeOn = true; zBack = H; zMin = H; zLast = H; hLast = hd;
+    }
+    let idx = 0;
+    for (const L of p.lenses) {
+      idx++;
+      if (!L.on) { info.push(null); continue; }
+      const kind = L.kind, f = L.f;
+      let zf, zb, g, h = L.D / 2;
+      if (kind === 'ideal' || kind === 'idealNeg') {
+        g = { t: 0, hObj: 0, hPrime: 0, fEff: Math.max(0.5, Math.abs(f)) * (kind === 'idealNeg' ? -1 : 1), h: h };
+      } else g = lensGeom(kind, f, h, n, L.pitch, warns, idx);
+      h = g.h;
+      const ref = first ? 0 : zBack;
+      let autoZf = first ? (g.fEff > 0 ? g.fEff - g.hObj : 10) : zBack - hPrime + fPrev + g.fEff - g.hObj;
+      const autoGap = autoZf - ref;
+      zf = L.free ? ref + Math.max(0, L.gap || 0) : autoZf + (L.trim || 0);
+      if (zf < zBack + 0.2) {
+        warns.push(first ? 'Lens 1 would touch the LED' + (domeOn ? ' dome' : '') + ' at this position. It was moved to 0.2 mm clear of it.'
+                         : 'Lens ' + idx + ' overlaps the previous lens. It was moved to touch it.');
+        zf = zBack + 0.2;
+      }
+      if (kind === 'ideal' || kind === 'idealNeg') {
+        zb = zf; s.push({ type: 1, z: zf, f: g.fEff, h: h });
+        polys.push({ ideal: true, z: zf, h: h, neg: kind === 'idealNeg', num: idx });
+      } else {
+        zb = zf + g.t;
+        const fr = g.fres;
+        s.push({ type: fr === 1 ? 2 : 0, z: zf, c: Math.abs(g.c1), k: g.k1, sgn: sgn(g.c1), h: h, n1: 1, n2: n, pitch: g.pitch });
+        s.push({ type: fr === 2 ? 2 : 0, z: zb, c: Math.abs(g.c2), k: g.k2, sgn: sgn(g.c2), h: h, n1: n, n2: 1, pitch: g.pitch });
+        const pts = [], M = 48;
+        const zF = (y) => zf + sgn(g.c1) * profile(g.c1, g.k1, y, fr === 1, g.pitch);
+        const zB = (y) => zb + sgn(g.c2) * profile(g.c2, g.k2, y, fr === 2, g.pitch);
+        if (fr) {
+          const K = Math.ceil(h / g.pitch), side = [];
+          for (let kf = 0; kf < K; kf++) { const ya = kf * g.pitch, yb = Math.min(h, (kf + 1) * g.pitch - 1e-6); side.push(ya, yb); }
+          for (let i = side.length - 1; i >= 0; i--) { const y = -side[i]; pts.push([zF(y), y, zB(y)]); }
+          for (let i = 0; i < side.length; i++) { const y = side[i]; pts.push([zF(y), y, zB(y)]); }
+        } else {
+          for (let i = 0; i <= M; i++) { const y = -h + 2 * h * i / M; pts.push([zF(y), y, zB(y)]); }
+        }
+        polys.push({ ideal: false, pts: pts, zf: zf, zb: zb, h: h, num: idx });
+      }
+      info.push({ f: g.fEff, t: g.t, zf: zf, zb: zb, autoGap: autoGap, gap: zf - ref });
+      zBack = zb; hPrime = g.hPrime; fPrev = g.fEff; first = false; zLast = zb; hLast = h;
+    }
+    return { s: s, polys: polys, warns: warns, info: info, domeOn: domeOn, zLast: zLast, hLast: hLast, wallZ: zLast + p.wall };
+  }
+
+  /* Trace one ray. Writes result into R. path (optional) receives z,y pairs.
+     R.wd is the weight after the dome (1 when there is no dome). */
+  function traceRay(sys, y0, sinT, R, path) {
+    let z = 0, y = y0, dz = Math.sqrt(1 - sinT * sinT), dy = sinT, w = 1;
+    if (path) path.push(z, y);
+    R.fail = 0; R.wd = sys.domeOn ? 0 : 1;
+    for (let j = 0; j < sys.s.length; j++) {
+      const S = sys.s[j];
+      if (S.type === 1) {
+        const t = (S.z - z) / dz; z = S.z; y += dy * t;
+        if (path) path.push(z, y);
+        if (Math.abs(y) > S.h) { R.fail = 1; R.w = 0; return R; }
+        const m = dy / dz - y / S.f, inv = 1 / Math.sqrt(1 + m * m);
+        dz = inv; dy = m * inv;
+        continue;
+      }
+      if (S.dome && S.zc > 0 && dy !== 0) {
+        const yw = dy > 0 ? S.wallY : -S.wallY, tw = (yw - y) / dy;
+        if (tw > 0 && z + dz * tw < S.zc) {
+          z += dz * tw; y = yw; if (path) path.push(z, y);
+          R.fail = 1; R.w = 0; return R;
+        }
+      }
+      let t = (S.z - z) / dz, sl = 0, ok = true, sk = 0;
+      const passes = S.type === 2 ? 4 : 1;
+      for (let pass = 0; pass < passes; pass++) {
+        if (S.type === 2) sk = sagFn(S.c, S.k, Math.floor(Math.abs(y + dy * t) / S.pitch) * S.pitch);
+        t = (S.z - z) / dz;
+        for (let it = 0; it < 10; it++) {
+          const yy = y + dy * t;
+          const q = 1 - (1 + S.k) * S.c * S.c * yy * yy;
+          if (q <= 0) { ok = false; break; }
+          const rq = Math.sqrt(q);
+          const sg = S.sgn * (S.c * yy * yy / (1 + rq) - sk);
+          sl = S.sgn * S.c * yy / rq;
+          const F = z + dz * t - S.z - sg;
+          const dt = F / (dz - sl * dy);
+          t -= dt;
+          if (Math.abs(dt) < 1e-9) break;
+        }
+        if (!ok || S.type !== 2) break;
+        const yn = y + dy * t;
+        if (sagFn(S.c, S.k, Math.floor(Math.abs(yn) / S.pitch) * S.pitch) === sk) break;
+      }
+      if (!ok || !(t > 0)) { R.fail = 1; R.w = 0; return R; }
+      const dzIn = dz, dyIn = dy;
+      z += dz * t; y += dy * t;
+      if (path) path.push(z, y);
+      if (Math.abs(y) > S.h) { R.fail = 1; R.w = 0; return R; }
+      if (S.type === 2) {
+        const yk = Math.floor(Math.abs(y) / S.pitch) * S.pitch;
+        const step = sagFn(S.c, S.k, yk + S.pitch) - sagFn(S.c, S.k, yk);
+        w *= Math.max(0.2, 1 - step * Math.abs(dyIn / dzIn) / S.pitch);
+      }
+      let nz = 1, ny = -sl;
+      const nn = Math.sqrt(nz * nz + ny * ny); nz /= nn; ny /= nn;
+      let cosi = -(dz * nz + dy * ny);
+      if (cosi < 0) { nz = -nz; ny = -ny; cosi = -cosi; }
+      const eta = S.n1 / S.n2;
+      const s2 = eta * eta * (1 - cosi * cosi);
+      if (s2 >= 1) { R.fail = 2; R.w = 0; return R; }
+      const cost = Math.sqrt(1 - s2);
+      const rs = (S.n1 * cosi - S.n2 * cost) / (S.n1 * cosi + S.n2 * cost);
+      const rp = (S.n1 * cost - S.n2 * cosi) / (S.n1 * cost + S.n2 * cosi);
+      w *= 1 - 0.5 * (rs * rs + rp * rp);
+      const g = eta * cosi - cost;
+      dz = eta * dz + g * nz; dy = eta * dy + g * ny;
+      const dn = Math.sqrt(dz * dz + dy * dy); dz /= dn; dy /= dn;
+      if (dz <= 0.0005) { R.fail = 3; R.w = 0; return R; }
+      if (S.dome) R.wd = w;
+    }
+    R.w = w; R.y = y; R.ang = Math.atan2(dy, dz); R.z = z;
+    return R;
+  }
+
+  function wquant(vals, wts, idx, q) {
+    let tot = 0;
+    for (let i = 0; i < idx.length; i++) tot += wts[idx[i]];
+    if (tot <= 0) return 0;
+    let acc = 0; const target = q * tot;
+    for (let i = 0; i < idx.length; i++) {
+      acc += wts[idx[i]];
+      if (acc >= target) return vals[idx[i]];
+    }
+    return vals[idx[idx.length - 1]];
+  }
+
+  function analyze(p, N) {
+    const sys = buildSystem(p);
+    const R = { fail: 0, w: 0, y: 0, ang: 0, z: 0, wd: 1 };
+    const ez = new Float64Array(N), wdA = new Float64Array(N);
+    const ys = new Float64Array(N), as = new Float64Array(N), ws = new Float64Array(N), w3 = new Float64Array(N), geo = new Uint8Array(N);
+    let sW2 = 0, sW3 = 0, sG3 = 0, sG2 = 0, D2 = 0, D3 = 0;
+    const passed = [];
+    for (let i = 0; i < N; i++) {
+      const u = frac(0.5 + i * A1), v = frac(0.5 + i * A2);
+      const y0 = (u - 0.5) * p.ledD, sinT = 2 * v - 1;
+      w3[i] = 2 * Math.abs(sinT);
+      traceRay(sys, y0, sinT, R, null);
+      wdA[i] = R.wd; D2 += R.wd; D3 += R.wd * w3[i];
+      if (R.fail === 0) {
+        ys[i] = R.y; as[i] = R.ang; ws[i] = R.w; geo[i] = 1; ez[i] = R.z;
+        sW2 += R.w; sW3 += R.w * w3[i]; sG3 += R.wd * w3[i]; sG2 += R.wd;
+        passed.push(i);
+      }
+    }
+    if (D2 <= 0) D2 = 1e-12; if (D3 <= 0) D3 = 1e-12;
+    const out = { sys: sys, N: N, eta2: sW2 / D2, eta3: sW3 / D3, geo2: sG2 / D2, geo3: sG3 / D3, passed: passed.length };
+    const Aled = Math.PI * p.ledD * p.ledD / 4 * (sys.domeOn ? p.dome.n * p.dome.n : 1);
+    out.Aled = Aled;
+    out.Lled = p.flux / (Math.PI * Aled) * 1e6;
+    out.tau = sG2 > 0 ? sW2 / sG2 : 0;
+    if (!passed.length || sW3 <= 0) { out.empty = true; return out; }
+
+    // flux weights for 3D estimate and 2D
+    const wf3 = new Float64Array(N);
+    for (const i of passed) wf3[i] = ws[i] * w3[i];
+    const absAng = new Float64Array(N), absY = new Float64Array(N);
+    for (const i of passed) { absAng[i] = Math.abs(as[i]); absY[i] = Math.abs(ys[i]); }
+    const byAng = passed.slice().sort((a, b) => absAng[a] - absAng[b]);
+    const byY = passed.slice().sort((a, b) => absY[a] - absY[b]);
+    const D = 180 / Math.PI;
+    out.th50 = wquant(absAng, wf3, byAng, 0.5) * D;
+    out.th90 = wquant(absAng, wf3, byAng, 0.9) * D;
+    out.th95 = wquant(absAng, wf3, byAng, 0.95) * D;
+    out.th99 = wquant(absAng, wf3, byAng, 0.99) * D;
+    const Hw = Math.max(0.05, wquant(absY, ws, byY, 0.995));
+    out.Hw = Hw;
+
+    // irradiance
+    const r0 = Math.max(0.15 * Hw, 1e-3);
+    let fc = 0;
+    for (const i of passed) if (absY[i] < r0) fc += wf3[i];
+    out.Ecenter = p.flux * (fc / D3) / (Math.PI * r0 * r0) * 1e6;
+    out.Emean = p.flux * out.eta3 / (Math.PI * Hw * Hw) * 1e6;
+
+    // profiles right after the last lens and on the wall (fraction of LED flux per mm, 2D slice)
+    const yw = new Float64Array(N), absYw = new Float64Array(N);
+    for (const i of passed) { yw[i] = ys[i] + Math.tan(as[i]) * (sys.wallZ - ez[i]); absYw[i] = Math.abs(yw[i]); }
+    const byYw = passed.slice().sort((a, b) => absYw[a] - absYw[b]);
+    const Hww = Math.max(0.05, wquant(absYw, ws, byYw, 0.995));
+    const RE = Math.max(Hw * 1.1, 0.3), RW = Math.max(Hww * 1.15, 0.3);
+    const B = 64, bwE = 2 * RE / B, bwW = 2 * RW / B;
+    const hE = new Float64Array(B), hW = new Float64Array(B);
+    for (const i of passed) {
+      const be = Math.floor((ys[i] + RE) / bwE), bw = Math.floor((yw[i] + RW) / bwW);
+      if (be >= 0 && be < B) hE[be] += ws[i];
+      if (bw >= 0 && bw < B) hW[bw] += ws[i];
+    }
+    for (let b = 0; b < B; b++) { hE[b] /= D2 * bwE; hW[b] /= D2 * bwW; }
+    out.prof = { B: B, RE: RE, RW: RW, exit: hE, wall: hW, Hw: Hw, HwWall: Hww };
+
+    // flatness over the central 80 % of the beam
+    let sm = 0, sq = 0, cnt = 0;
+    for (let b = 0; b < B; b++) {
+      const yc = -RE + (b + 0.5) * bwE;
+      if (Math.abs(yc) < 0.8 * Hw) { sm += hE[b]; sq += hE[b] * hE[b]; cnt++; }
+    }
+    if (cnt > 4) { const m = sm / cnt; out.flatCV = Math.sqrt(Math.max(0, sq / cnt - m * m)) / Math.max(1e-12, m); } else out.flatCV = NaN;
+
+    // apparent source seen from the middle of the last lens
+    let cen = passed.filter((i) => absY[i] < 0.12 * Hw);
+    if (cen.length < 60) cen = passed;
+    const aVal = new Float64Array(N);
+    for (const i of cen) aVal[i] = as[i] * D;
+    const byA = cen.slice().sort((a, b) => aVal[a] - aVal[b]);
+    const aLo = wquant(aVal, ws, byA, 0.005), aHi = wquant(aVal, ws, byA, 0.995);
+    out.appW = Math.max(1e-4, aHi - aLo);
+    out.appC = 0.5 * (aHi + aLo);
+    const range = Math.max(0.6, 1.5 * out.appW / 2 + Math.abs(out.appC));
+    const AB = 60, abw = 2 * range / AB, ah = new Float64Array(AB);
+    let aTot = 0;
+    for (const i of cen) { const b = Math.floor((aVal[i] + range) / abw); if (b >= 0 && b < AB) { ah[b] += ws[i]; aTot += ws[i]; } }
+    for (let b = 0; b < AB; b++) ah[b] = aTot > 0 ? ah[b] / aTot / abw : 0;
+    out.app = { range: range, AB: AB, h: ah };
+    out.penumbra = Math.tan(out.appW / D) * 1000;
+
+    // etendue (mm^2 sr)
+    out.Gled = Math.PI * Aled;
+    out.Gcap = out.Gled * out.geo3;
+    out.Gout = Math.PI * Hw * Hw * Math.PI * Math.pow(Math.sin(out.th95 / D), 2);
+    out.Gratio = out.Gcap > 0 ? out.Gout / (0.95 * out.Gcap) : NaN;
+    out.Elimit = out.Lled * Math.PI * Math.pow(Math.sin(out.th95 / D), 2);
+    out.beamFull = 2 * out.th95;
+    return out;
+  }
+
+  /* Rays for drawing: a fixed bundle from 5 points on the LED. */
+  function rayPaths(p, perPoint) {
+    const sys = buildSystem(p), R = { fail: 0, w: 0, y: 0, ang: 0, z: 0 };
+    const res = [], pts = [-0.5, -0.25, 0, 0.25, 0.5];
+    for (let a = 0; a < pts.length; a++) {
+      for (let j = 0; j < perPoint; j++) {
+        const sinT = -1 + 2 * (j + 0.5) / perPoint, y0 = pts[a] * p.ledD, path = [];
+        traceRay(sys, y0, sinT, R, path);
+        if (R.fail === 0) {
+          path.push(sys.wallZ, R.y + Math.tan(R.ang) * (sys.wallZ - R.z));
+        }
+        res.push({ path: path, ok: R.fail === 0, fail: R.fail, led: a, w: R.w });
+      }
+    }
+    return { sys: sys, rays: res };
+  }
+
+  function sweep(p, which, xs, N) {
+    const q = JSON.parse(JSON.stringify(p)), out = [];
+    for (const x of xs) {
+      if (which === 'f') q.lenses[0].f = x;
+      else if (which === 'D') q.lenses[0].D = x;
+      else q.ledD = x;
+      const r = analyze(q, N);
+      out.push({ x: x, eta: r.empty ? 0 : r.eta3 * 100, ang: r.empty ? NaN : r.beamFull, Ec: r.empty ? 0 : r.Ecenter, pen: r.empty ? NaN : r.penumbra });
+    }
+    return out;
+  }
+
+  const api = { SUN, MATERIALS, DOME_MATERIALS, NEG, KINDS, buildSystem, traceRay, analyze, rayPaths, sweep };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const E = window.Engine, SUN = E.SUN, D2R = Math.PI / 180;
+  const $ = (s, r) => (r || document).querySelector(s);
+
+  /* ---------- state ---------- */
+  const lens = (on, kind, f, D) => ({ on: on, kind: kind, f: f, D: D, trim: 0, pitch: 0.5, free: false, gap: 30 });
+  const DOME0 = { on: false, R: 5, hr: 1, n: 1.41 };
+  const state = {
+    n: 1.49, ledD: 3, flux: 1000, wall: 800, target: SUN.angDeg, dome: Object.assign({}, DOME0), colorMode: 'led', sweep: 'f',
+    lenses: [lens(true, 'asphC', 35, 50), lens(false, 'asphF', 20, 34), lens(false, 'asphC', 80, 124)]
+  };
+  const PRESETS = [
+    { name: 'Flashlight', set: { ledD: 3, flux: 1000, wall: 800, l: [[1, 'asphC', 35, 50], [0], [0]] } },
+    { name: 'Sun-like beam', set: { ledD: 3, flux: 1000, wall: 1500, l: [[1, 'asphC', 322, 80], [0], [0]] } },
+    { name: 'Plastic Fresnel lens', set: { ledD: 3, flux: 1000, wall: 1500, l: [[1, 'fresnelC', 100, 100, { pitch: 0.5 }], [0], [0]] } },
+    { name: 'Domed 5 mm LED', set: { ledD: 0.3, flux: 20, wall: 800, dome: { on: true, R: 2.5, hr: 2.8, n: 1.53 }, l: [[0], [0], [0]] } },
+    { name: 'Domed LED + lens', set: { ledD: 1, flux: 300, wall: 800, dome: { on: true, R: 3, hr: 1, n: 1.41 }, l: [[1, 'asphC', 35, 50], [0], [0]] } },
+    { name: 'Lens too small', set: { ledD: 3, flux: 1000, wall: 800, l: [[1, 'asphC', 40, 10], [0], [0]] } },
+    { name: 'Spherical lens', set: { ledD: 3, flux: 1000, wall: 800, l: [[1, 'sphF', 60, 50], [0], [0]] } },
+    { name: 'Biconvex lens', set: { ledD: 3, flux: 1000, wall: 800, l: [[1, 'biconvex', 80, 50], [0], [0]] } },
+    { name: 'Ball lens', set: { ledD: 1, flux: 300, wall: 800, l: [[1, 'ball', 1, 10], [0], [0]] } },
+    { name: 'Ideal thin lens', set: { ledD: 3, flux: 1000, wall: 800, l: [[1, 'ideal', 35, 50], [0], [0]] } },
+    { name: 'Collimate, then expand', set: { ledD: 3, flux: 1000, wall: 1000, l: [[1, 'asphC', 15, 30], [1, 'asphF', 20, 34], [1, 'asphC', 80, 124]] } },
+    { name: 'Galilean expander', set: { ledD: 3, flux: 1000, wall: 1000, l: [[1, 'asphC', 15, 30], [1, 'biconcave', 30, 34, { free: true, gap: 10 }], [1, 'asphC', 120, 124]] } }
+  ];
+
+  /* ---------- helpers ---------- */
+  const sig = (v, n) => (v === 0 || !isFinite(v)) ? 0 : Number(Number(v).toPrecision(n || 3));
+  function fmt(v, d) {
+    if (!isFinite(v)) return '–';
+    const a = Math.abs(v);
+    if (a >= 1000) return v.toFixed(0);
+    if (a >= 100) return v.toFixed(d == null ? 0 : d);
+    if (a >= 10) return v.toFixed(d == null ? 1 : d);
+    if (a >= 1) return v.toFixed(d == null ? 2 : d);
+    if (a >= 0.01) return v.toFixed(d == null ? 3 : d);
+    return v.toPrecision(2);
+  }
+  function fmtLux(e) {
+    if (!isFinite(e)) return ['–', ''];
+    if (e >= 1e6) return [fmt(e / 1e6), 'Mlx'];
+    if (e >= 1e3) return [fmt(e / 1e3), 'klx'];
+    return [fmt(e), 'lx'];
+  }
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+    return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+  }
+  const css = () => {
+    const cs = getComputedStyle(document.documentElement), g = (n) => cs.getPropertyValue(n).trim();
+    return { stage: g('--stage'), grid: g('--grid'), ink: g('--ink'), muted: g('--muted'), line: g('--line'), accent: g('--accent'),
+      sun: g('--sun'), glass: g('--glass'), led: g('--led'), good: g('--good'), warn: g('--warn'), lost: g('--lost'), lost2: g('--lost2'),
+      panel2: g('--panel2'), r: [g('--r0'), g('--r1'), g('--r2'), g('--r3'), g('--r4')], mono: g('--font-mono') || 'monospace' };
+  };
+  function prep(cv) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, W: w, H: h };
+  }
+
+  /* ---------- controls ---------- */
+  const syncers = [];
+  function control(parent, o) {
+    const id = 'c' + Math.random().toString(36).slice(2, 8);
+    const box = document.createElement('div'); box.className = 'ctl';
+    box.innerHTML = '<label for="' + id + 'n"><span>' + o.label + '</span></label><div class="ctl-row"><input type="range" id="' + id + 'r" min="0" max="1000" step="1" aria-label="' + o.label + '"><input type="number" id="' + id + 'n" step="any"><span class="unit">' + (o.unit || '') + '</span></div>';
+    parent.appendChild(box);
+    const r = $('input[type=range]', box), nIn = $('input[type=number]', box);
+    const lmin = Math.log(o.min), lmax = Math.log(o.max);
+    const toT = (v) => o.log ? 1000 * (Math.log(Math.min(o.max, Math.max(o.min, v))) - lmin) / (lmax - lmin) : 1000 * (v - o.min) / (o.max - o.min);
+    const fromT = (t) => o.log ? Math.exp(lmin + (t / 1000) * (lmax - lmin)) : o.min + (t / 1000) * (o.max - o.min);
+    r.addEventListener('input', () => { const v = sig(fromT(+r.value), 3); o.set(v); nIn.value = v; schedule(); });
+    nIn.addEventListener('change', () => { let v = parseFloat(nIn.value); if (!isFinite(v)) v = o.get(); v = Math.min(o.hardMax || o.max * 2, Math.max(o.hardMin || o.min / 2, v)); o.set(v); sync(); schedule(); });
+    function sync() { const v = o.get(); r.value = toT(v); nIn.value = sig(v, 4); }
+    syncers.push(sync); sync();
+    return box;
+  }
+
+  const lensUI = [];
+  function lensCard(host, idx) {
+    const L = state.lenses[idx];
+    host.innerHTML = '<div class="lens-head"><h2>Lens ' + (idx + 1) + '</h2><label><input type="checkbox" id="lon' + idx + '"> Use this lens</label></div><div class="lens-body"></div>';
+    const body = $('.lens-body', host);
+    const sel = document.createElement('select'); sel.setAttribute('aria-label', 'Lens ' + (idx + 1) + ' type');
+    E.KINDS.forEach((k) => { const o = document.createElement('option'); o.value = k.id; o.textContent = k.name; sel.appendChild(o); });
+    body.appendChild(sel);
+    const fBox = control(body, { label: 'Focal length f', unit: 'mm', min: 2, max: 600, log: true, hardMin: 0.5, hardMax: 5000, get: () => L.f, set: (v) => { L.f = v; } });
+    const dBox = control(body, { label: 'Diameter Ø', unit: 'mm', min: 2, max: 250, log: true, hardMin: 0.5, hardMax: 1000, get: () => L.D, set: (v) => { L.D = v; } });
+    const pBox = control(body, { label: 'Groove pitch', unit: 'mm', min: 0.1, max: 3, log: true, hardMin: 0.05, hardMax: 10, get: () => L.pitch, set: (v) => { L.pitch = v; } });
+    const tBox = control(body, { label: 'Position trim', unit: 'mm', min: -100, max: 100, hardMin: -2000, hardMax: 2000, get: () => L.trim, set: (v) => { L.trim = v; } });
+    const gBox = control(body, { label: idx === 0 ? 'Distance from LED chip to lens' : 'Gap behind previous lens', unit: 'mm', min: 0.2, max: 1000, log: true, hardMin: 0, hardMax: 20000, get: () => L.gap, set: (v) => { L.gap = v; } });
+    const fr = document.createElement('label'); fr.className = 'chk';
+    fr.innerHTML = '<input type="checkbox"> Free position (override automatic spacing)';
+    body.insertBefore(fr, tBox);
+    const info = document.createElement('p'); info.className = 'hint mono lens-info'; body.appendChild(info);
+    const note = document.createElement('p'); note.className = 'hint';
+    note.textContent = idx === 0 ? 'Automatic: the LED sits in the focal point. Trim shifts the lens from there.' : 'Automatic: spaced so this lens and the one before form an afocal pair. Trim shifts it from there.';
+    body.appendChild(note);
+    const cb = $('#lon' + idx, host), frCb = $('input', fr);
+    sel.addEventListener('change', () => { L.kind = sel.value; refresh(); schedule(); });
+    cb.addEventListener('change', () => { L.on = cb.checked; refresh(); schedule(); });
+    frCb.addEventListener('change', () => {
+      L.free = frCb.checked;
+      if (L.free) { const inf = res && res.sys.info[idx]; L.gap = sig(inf ? inf.gap : L.gap, 4); }
+      syncAll(); refresh(); schedule();
+    });
+    function refresh() {
+      body.hidden = !L.on;
+      const ball = L.kind === 'ball', fres = L.kind.indexOf('fresnel') === 0, neg = !!E.NEG[L.kind];
+      fBox.hidden = ball; pBox.hidden = !fres; tBox.hidden = !!L.free; gBox.hidden = !L.free;
+      $('label span', fBox).textContent = neg ? 'Focal length |f| (negative lens)' : 'Focal length f';
+      $('label span', dBox).textContent = ball ? 'Ball diameter Ø' : 'Diameter Ø';
+      note.hidden = !!L.free;
+    }
+    syncers.push(() => { sel.value = L.kind; cb.checked = L.on; frCb.checked = !!L.free; refresh(); });
+    lensUI.push({ info: info, L: L });
+  }
+  function renderLensInfo() {
+    lensUI.forEach((u, i) => {
+      const inf = paths.sys.info[i];
+      u.info.textContent = inf ? 'f = ' + fmt(inf.f, 3) + ' mm · centre thickness ' + fmt(inf.t, 2) + ' mm · front at ' + fmt(inf.zf, 4) + ' mm' : '';
+    });
+  }
+
+  function buildControls() {
+    const pr = $('#presets');
+    PRESETS.forEach((p) => {
+      const b = document.createElement('button'); b.className = 'chip'; b.textContent = p.name;
+      b.addEventListener('click', () => {
+        const s = p.set; state.ledD = s.ledD; state.flux = s.flux; state.wall = s.wall; state.n = 1.49;
+        state.dome = Object.assign({}, DOME0, s.dome || {});
+        s.l.forEach((x, i) => {
+          const L = state.lenses[i];
+          Object.assign(L, { on: !!x[0], trim: 0, free: false, gap: 30, pitch: 0.5 });
+          if (x[0]) { L.kind = x[1]; L.f = x[2]; L.D = x[3]; Object.assign(L, x[4] || {}); }
+        });
+        syncAll(); schedule(); fit('optics');
+      });
+      pr.appendChild(b);
+    });
+    control($('#ledCtl'), { label: 'Emitter diameter', unit: 'mm', min: 0.3, max: 30, log: true, hardMin: 0.05, hardMax: 100, get: () => state.ledD, set: (v) => { state.ledD = v; } });
+    control($('#ledCtl'), { label: 'Light output', unit: 'lm', min: 10, max: 20000, log: true, hardMin: 1, hardMax: 200000, get: () => state.flux, set: (v) => { state.flux = v; } });
+    const dome = $('#domeBox');
+    $('#domeOn').addEventListener('change', (e) => { state.dome.on = e.target.checked; dome.hidden = !state.dome.on; schedule(); fit('optics'); });
+    control(dome, { label: 'Dome radius', unit: 'mm', min: 0.5, max: 30, log: true, hardMin: 0.2, hardMax: 100, get: () => state.dome.R, set: (v) => { state.dome.R = v; } });
+    control(dome, { label: 'Dome height ÷ radius (1 = hemisphere)', unit: '×', min: 0.2, max: 3, hardMin: 0.1, hardMax: 6, get: () => state.dome.hr, set: (v) => { state.dome.hr = v; } });
+    const dsel = document.createElement('select'); dsel.setAttribute('aria-label', 'Dome material');
+    E.DOME_MATERIALS.forEach((m) => { const o = document.createElement('option'); o.value = m.n; o.textContent = m.name; dsel.appendChild(o); });
+    dsel.addEventListener('change', () => { state.dome.n = parseFloat(dsel.value); schedule(); });
+    dome.appendChild(dsel);
+    syncers.push(() => { $('#domeOn').checked = state.dome.on; dome.hidden = !state.dome.on; dsel.value = String(state.dome.n); });
+    const mat = $('#material');
+    E.MATERIALS.forEach((m) => { const o = document.createElement('option'); o.value = m.n; o.textContent = m.name; mat.appendChild(o); });
+    mat.addEventListener('change', () => { state.n = parseFloat(mat.value); schedule(); });
+    syncers.push(() => { mat.value = String(state.n); });
+    lensCard($('#lens1'), 0); lensCard($('#lens2'), 1); lensCard($('#lens3'), 2);
+    control($('#wallCtl'), { label: 'Distance behind the last lens', unit: 'mm', min: 50, max: 20000, log: true, hardMin: 10, hardMax: 100000, get: () => state.wall, set: (v) => { state.wall = v; } });
+    control($('#assistCtl'), { label: 'Wanted beam angle (full)', unit: '°', min: 0.1, max: 30, log: true, hardMin: 0.02, hardMax: 80, get: () => state.target, set: (v) => { state.target = v; } });
+    $('#setF').addEventListener('click', () => {
+      const f = (state.ledD / 2) / Math.tan(state.target * D2R / 2);
+      state.lenses[0].f = sig(f, 3); syncAll(); schedule(); fit('optics');
+    });
+    $('#setSun').addEventListener('click', () => { state.target = SUN.angDeg; syncAll(); schedule(); });
+    $('#sweepVar').addEventListener('change', (e) => { state.sweep = e.target.value; runSweep(); });
+    $('#cmLed').addEventListener('click', () => setColorMode('led'));
+    $('#cmFate').addEventListener('click', () => setColorMode('fate'));
+    $('#fitOptics').addEventListener('click', () => fit('optics'));
+    $('#fitLed').addEventListener('click', () => fit('led'));
+    $('#fitWall').addEventListener('click', () => fit('wall'));
+  }
+  function syncAll() { syncers.forEach((s) => s()); }
+  function setColorMode(m) {
+    state.colorMode = m;
+    $('#cmLed').setAttribute('aria-pressed', m === 'led'); $('#cmFate').setAttribute('aria-pressed', m === 'fate');
+    renderStage(); renderLegend();
+  }
+  const params = () => ({ n: state.n, ledD: state.ledD, flux: state.flux, wall: state.wall, dome: state.dome, lenses: state.lenses });
+
+  /* ---------- run loop ---------- */
+  let pending = false, res = null, paths = null, sweepTimer = 0, sweepData = null;
+  function schedule() { if (!pending) { pending = true; requestAnimationFrame(run); } }
+  function run() {
+    pending = false;
+    const p = params();
+    res = E.analyze(p, 20000);
+    paths = E.rayPaths(p, 28);
+    renderStage(); renderLegend(); renderWarns(); renderKpis(); renderBudget(); renderApparent(); renderProfiles(); renderAssist(); renderNotes(); renderLedInfo(); renderLensInfo();
+    clearTimeout(sweepTimer); sweepTimer = setTimeout(runSweep, 160);
+  }
+
+  /* ---------- stage ---------- */
+  const view = { cz: 40, cy: 0, s: 5, set: false };
+  function fit(mode) {
+    const cv = $('#stage'), W = cv.clientWidth, H = cv.clientHeight, sys = paths ? paths.sys : E.buildSystem(params());
+    let z0, z1, yh;
+    if (mode === 'led') { yh = state.ledD * 1.3; z0 = -state.ledD * 0.8; z1 = z0 + (W / H) * 2 * yh; }
+    else if (mode === 'wall') { z0 = -0.03 * sys.wallZ; z1 = sys.wallZ * 1.02; yh = Math.max(sys.hLast * 1.15, 5, (sys.wallZ * 0.04)); }
+    else { z0 = -6; z1 = sys.zLast + Math.max(30, sys.zLast * 0.7); yh = Math.max(sys.hLast * 1.2, state.ledD, 5); }
+    const s = Math.min(W / (z1 - z0), H / (2 * yh));
+    view.s = s; view.cz = (z0 + z1) / 2; view.cy = 0; view.set = true;
+    renderStage();
+  }
+  function stageEvents() {
+    const cv = $('#stage');
+    cv.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      const zb = view.cz + (mx - r.width / 2) / view.s, yb = view.cy - (my - r.height / 2) / view.s;
+      view.s *= Math.pow(1.0015, -e.deltaY);
+      view.s = Math.min(4000, Math.max(0.02, view.s));
+      view.cz = zb - (mx - r.width / 2) / view.s; view.cy = yb + (my - r.height / 2) / view.s;
+      renderStage();
+    }, { passive: false });
+    let drag = null;
+    cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, cz: view.cz, cy: view.cy }; cv.setPointerCapture(e.pointerId); cv.classList.add('drag'); });
+    cv.addEventListener('pointermove', (e) => { if (!drag) return; view.cz = drag.cz - (e.clientX - drag.x) / view.s; view.cy = drag.cy + (e.clientY - drag.y) / view.s; renderStage(); });
+    const end = () => { drag = null; cv.classList.remove('drag'); };
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    cv.addEventListener('dblclick', () => fit('optics'));
+  }
+  function renderStage() {
+    if (!paths) return;
+    const cv = $('#stage'), { ctx, W, H } = prep(cv), C = css(), sys = paths.sys;
+    if (!view.set) { fit('optics'); return; }
+    const X = (z) => W / 2 + (z - view.cz) * view.s, Y = (y) => H / 2 - (y - view.cy) * view.s;
+    ctx.fillStyle = C.stage; ctx.fillRect(0, 0, W, H);
+    // grid
+    const step = niceStep(80 / view.s);
+    ctx.lineWidth = 1; ctx.strokeStyle = C.grid; ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textBaseline = 'alphabetic';
+    const zA = view.cz - W / 2 / view.s, zB = view.cz + W / 2 / view.s, yA = view.cy - H / 2 / view.s, yB = view.cy + H / 2 / view.s;
+    ctx.beginPath();
+    for (let z = Math.ceil(zA / step) * step; z <= zB; z += step) { const x = Math.round(X(z)) + 0.5; ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = Math.ceil(yA / step) * step; y <= yB; y += step) { const yy = Math.round(Y(y)) + 0.5; ctx.moveTo(0, yy); ctx.lineTo(W, yy); }
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    for (let z = Math.ceil(zA / step) * step; z <= zB; z += step) ctx.fillText(fmt(z, 4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') + (Math.abs(z) < 1e-9 ? ' mm' : ''), X(z) + 3, H - 5);
+    for (let y = Math.ceil(yA / step) * step; y <= yB; y += step) if (Math.abs(y) > 1e-9) ctx.fillText(fmt(y, 4).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''), 4, Y(y) - 3);
+    // axis
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.moveTo(0, Y(0)); ctx.lineTo(W, Y(0)); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // wall
+    const xw = X(sys.wallZ);
+    if (xw > -5 && xw < W + 5) {
+      ctx.strokeStyle = C.muted; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xw, 0); ctx.lineTo(xw, H); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = C.muted; ctx.textAlign = 'right'; ctx.fillText('wall', xw - 6, 14);
+    }
+    // rays
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.lineWidth = 1;
+    const groups = {};
+    paths.rays.forEach((r) => {
+      let col, al;
+      if (state.colorMode === 'led') { col = C.r[r.led]; al = r.ok ? 0.55 : 0.28; }
+      else { col = r.ok ? C.led : (r.fail === 2 ? C.lost2 : C.lost); al = r.ok ? 0.5 : 0.6; }
+      const key = col + '|' + al;
+      (groups[key] = groups[key] || { col: col, al: al, list: [] }).list.push(r);
+    });
+    Object.keys(groups).forEach((k) => {
+      const g = groups[k]; ctx.strokeStyle = g.col; ctx.globalAlpha = g.al; ctx.beginPath();
+      g.list.forEach((r) => { const p = r.path; ctx.moveTo(X(p[0]), Y(p[1])); for (let i = 2; i < p.length; i += 2) ctx.lineTo(X(p[i]), Y(p[i + 1])); });
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    paths.rays.forEach((r) => {
+      if (r.ok) return; const p = r.path, x = X(p[p.length - 2]), y = Y(p[p.length - 1]);
+      ctx.strokeStyle = r.fail === 2 ? C.lost2 : C.lost; ctx.beginPath(); ctx.moveTo(x - 2.5, y - 2.5); ctx.lineTo(x + 2.5, y + 2.5); ctx.moveTo(x + 2.5, y - 2.5); ctx.lineTo(x - 2.5, y + 2.5); ctx.stroke();
+    });
+    ctx.restore();
+    // lenses and dome
+    sys.polys.forEach((P) => {
+      if (P.dome) {
+        ctx.beginPath(); P.loop.forEach((q, j) => { const x = X(q[0]), y = Y(q[1]); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath();
+        ctx.globalAlpha = 0.16; ctx.fillStyle = C.glass; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.glass; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
+        return;
+      }
+      if (P.ideal) {
+        const x = X(P.z); ctx.strokeStyle = C.glass; ctx.fillStyle = C.glass; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x, Y(-P.h)); ctx.lineTo(x, Y(P.h)); ctx.stroke(); ctx.lineWidth = 1;
+        [1, -1].forEach((sg) => {
+          const yy = Y(sg * P.h), d = -sg * 9; ctx.beginPath();
+          if (P.neg) { ctx.moveTo(x - 5, yy); ctx.lineTo(x + 5, yy); ctx.lineTo(x, yy - d); }
+          else { ctx.moveTo(x, yy); ctx.lineTo(x - 5, yy - d); ctx.lineTo(x + 5, yy - d); }
+          ctx.closePath(); ctx.fill();
+        });
+        ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.fillText('L' + P.num, x, Y(P.h) - 12);
+        return;
+      }
+      ctx.beginPath();
+      P.pts.forEach((q, j) => { const x = X(q[0]), y = Y(q[1]); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      for (let j = P.pts.length - 1; j >= 0; j--) ctx.lineTo(X(P.pts[j][2]), Y(P.pts[j][1]));
+      ctx.closePath(); ctx.globalAlpha = 0.22; ctx.fillStyle = C.glass; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = C.glass; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.fillText('L' + P.num, X((P.zf + P.zb) / 2), Y(P.h) - 8);
+    });
+    // LED
+    const lw = Math.max(0.5, state.ledD * 0.22), hh = state.ledD / 2;
+    ctx.fillStyle = C.panel2; ctx.fillRect(X(-lw * 2.2), Y(Math.max(hh * 1.6, hh + 0.5)), X(-lw) - X(-lw * 2.2), Y(-Math.max(hh * 1.6, hh + 0.5)) - Y(Math.max(hh * 1.6, hh + 0.5)));
+    ctx.shadowColor = C.led; ctx.shadowBlur = 10; ctx.fillStyle = C.led;
+    ctx.fillRect(X(-lw), Y(hh), Math.max(2, X(0) - X(-lw)), Math.max(2.5, Y(-hh) - Y(hh))); ctx.shadowBlur = 0;
+    ctx.fillStyle = C.ink; ctx.textAlign = 'right'; ctx.fillText('LED Ø' + fmt(state.ledD) + ' mm', X(-lw * 2.4), Y(0) - 6);
+    // scale bar
+    const sb = niceStep(110 / view.s), sx = W - 16 - sb * view.s;
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, H - 22); ctx.lineTo(sx + sb * view.s, H - 22); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.fillText(fmt(sb, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') + ' mm', sx + sb * view.s / 2, H - 28);
+  }
+  function renderLegend() {
+    const C = css(), lg = $('#legend');
+    if (state.colorMode === 'led') {
+      lg.innerHTML = ['LED edge (top)', '', 'LED centre', '', 'LED edge (bottom)'].map((t, i) => t ? '<span><i style="background:' + C.r[i] + '"></i>' + t + '</span>' : '').join('') + '<span>Each colour is one point on the LED. A collimator turns each point into a parallel bundle.</span>';
+    } else {
+      lg.innerHTML = '<span><i style="background:' + C.led + '"></i>Leaves the last lens</span><span><i style="background:' + C.lost + '"></i>Misses a lens (lost)</span><span><i style="background:' + C.lost2 + '"></i>Total internal reflection (lost)</span>';
+    }
+  }
+  function renderWarns() {
+    $('#warns').innerHTML = paths.sys.warns.map((w) => '<li>' + w + '</li>').join('');
+  }
+  function renderLedInfo() {
+    const A = Math.PI * state.ledD * state.ledD / 4, d = state.dome.on, nn = d ? state.dome.n * state.dome.n : 1, L = state.flux / (Math.PI * A * nn) * 1e6;
+    $('#ledInfo').textContent = 'Chip area ' + fmt(A) + ' mm² · ' + fmt(state.flux / A) + ' lm/mm² · ' + (d ? 'dome luminance ' : 'luminance ') + fmt(L / 1e6) + ' Mcd/m² (sun ' + fmt(SUN.lum / 1e6) + ')' + (d ? '. The dome makes the source look ' + fmt(state.dome.n, 3) + '× wider and ' + fmt(nn, 3) + '× dimmer.' : '');
+  }
+
+  /* ---------- readouts ---------- */
+  function renderKpis() {
+    const k = $('#kpis'), r = res;
+    if (r.empty) { k.innerHTML = '<div class="kpi" style="grid-column:1/-1"><div class="k">No light</div><div class="v">0 lm</div><div class="s">No ray gets through this lens set. Check the lens diameter and focal length.</div></div>'; return; }
+    const lux = fmtLux(r.Ecenter), mean = fmtLux(r.Emean), ratio = r.Ecenter / SUN.lux;
+    const pos = Math.min(1, Math.max(0, (Math.log10(Math.max(ratio, 1e-6)) + 2) / 3)) * 100, sunPos = 2 / 3 * 100;
+    const soft = r.appW / SUN.angDeg;
+    const cards = [
+      ['Light delivered', fmt(r.eta3 * 100, 1) + '<small>%</small>', fmt(state.flux * r.eta3) + ' of ' + fmt(state.flux) + ' lm · 2D slice shows ' + fmt(r.eta2 * 100, 1) + '%'],
+      ['Beam centre brightness', lux[0] + '<small>' + lux[1] + '</small>', '= ' + fmt(ratio * 100, 2) + '% of full sunlight · beam average ' + mean[0] + ' ' + mean[1] +
+        '<div class="bar" title="log scale, sun marked"><b style="width:' + pos.toFixed(1) + '%"></b><u style="left:' + sunPos.toFixed(1) + '%"></u></div>'],
+      ['Source size seen from the beam', fmt(r.appW, 2) + '<small>°</small>', 'Sun is 0.53° · this is ' + (soft >= 1 ? fmt(soft, 2) + '× wider (softer shadows)' : fmt(1 / soft, 2) + '× narrower (harder shadows)')],
+      ['Shadow edge blur', fmt(r.penumbra, 2) + '<small>mm per m</small>', 'Sun: ' + SUN.penumbraMmPerM + ' mm per metre between object and surface'],
+      ['Beam size and spread', '⌀ ' + fmt(2 * r.Hw, 3) + '<small>mm</small>', 'Full angle ' + fmt(r.beamFull, 2) + '° holds 95% of the light'],
+      ['Beam evenness', isFinite(r.flatCV) ? fmt(r.flatCV * 100, 1) + '<small>% ripple</small>' : '–', 'Spread of brightness across the middle 80% of the beam. Lower is flatter.']
+    ];
+    k.innerHTML = cards.map((c) => '<div class="kpi"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div><div class="s">' + c[2] + '</div></div>').join('');
+  }
+  function renderBudget() {
+    const r = res, el = $('#budget'), C = css();
+    if (r.empty) { el.innerHTML = '<p class="hint">No light reaches the output.</p>'; return; }
+    const dl = r.eta3, fr = Math.max(0, r.geo3 - r.eta3), ms = Math.max(0, 1 - r.geo3), F = state.flux;
+    const needL = SUN.lux / (Math.PI * Math.pow(Math.sin(r.th95 * D2R), 2));
+    const e = (v) => fmt(v);
+    el.innerHTML =
+      '<div class="split" role="img" aria-label="Light budget"><span style="width:' + dl * 100 + '%;background:' + C.accent + '"></span><span style="width:' + fr * 100 + '%;background:' + C.warn + '"></span><span style="width:' + ms * 100 + '%;background:' + C.lost + '"></span></div>' +
+      '<dl class="rows">' +
+      '<dt><span style="color:' + C.accent + '">■</span> Delivered into the beam</dt><dd>' + e(F * dl) + ' lm</dd>' +
+      '<dt><span style="color:' + C.warn + '">■</span> Lost to reflections and groove risers</dt><dd>' + e(F * fr) + ' lm</dd>' +
+      '<dt><span style="color:' + C.lost + '">■</span> Never reached the lens</dt><dd>' + e(F * ms) + ' lm</dd>' +
+      '</dl><dl class="rows" style="border-top:1px solid var(--line);padding-top:8px">' +
+      '<dt>LED luminance</dt><dd>' + e(r.Lled / 1e6) + ' Mcd/m²</dd>' +
+      '<dt>Sun luminance</dt><dd>' + e(SUN.lum / 1e6) + ' Mcd/m²</dd>' +
+      '<dt>Brightest possible at this beam angle</dt><dd>' + fmtLux(r.Elimit).join(' ') + '</dd>' +
+      '<dt>What the optics deliver at the centre</dt><dd>' + fmtLux(r.Ecenter).join(' ') + '</dd>' +
+      '<dt>LED luminance needed for 100 klx at this angle</dt><dd>' + e(needL / 1e6) + ' Mcd/m²</dd>' +
+      '<dt>Etendue captured from the LED</dt><dd>' + e(r.Gcap) + ' mm²·sr</dd>' +
+      '<dt>Etendue of the beam</dt><dd>' + e(r.Gout) + ' mm²·sr</dd>' +
+      '<dt>Beam etendue ÷ captured (1.0 is perfect)</dt><dd>' + fmt(r.Gratio, 2) + '</dd></dl>';
+  }
+  function renderApparent() {
+    const cv = $('#appChart'), { ctx, W, H } = prep(cv), C = css(), r = res;
+    ctx.clearRect(0, 0, W, H);
+    if (r.empty) return;
+    const a = r.app, R = a.range, m = { l: 10, r: 10, t: 26, b: 22 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const sunH = 1 / SUN.angDeg, maxV = Math.max(sunH, Math.max.apply(null, a.h)) * 1.1;
+    const X = (d) => m.l + (d + R) / (2 * R) * pw, Y = (v) => m.t + ph - v / maxV * ph;
+    ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(m.l, m.t + ph + 0.5); ctx.lineTo(m.l + pw, m.t + ph + 0.5); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textAlign = 'center';
+    const st = niceStep(R / 2.5);
+    for (let d = -Math.floor(R / st) * st; d <= R + 1e-9; d += st) { ctx.fillText(fmt(d, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') + '°', X(d), H - 6); ctx.beginPath(); ctx.moveTo(X(d), m.t + ph); ctx.lineTo(X(d), m.t + ph + 4); ctx.stroke(); }
+    // led
+    ctx.beginPath(); ctx.moveTo(X(-R), Y(0));
+    for (let b = 0; b < a.AB; b++) { const x0 = X(-R + b * 2 * R / a.AB), x1 = X(-R + (b + 1) * 2 * R / a.AB); ctx.lineTo(x0, Y(a.h[b])); ctx.lineTo(x1, Y(a.h[b])); }
+    ctx.lineTo(X(R), Y(0)); ctx.closePath(); ctx.globalAlpha = 0.35; ctx.fillStyle = C.accent; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.stroke();
+    // sun
+    const hs = SUN.angDeg / 2; ctx.strokeStyle = C.sun; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
+    ctx.beginPath(); ctx.moveTo(X(-hs), Y(0)); ctx.lineTo(X(-hs), Y(sunH)); ctx.lineTo(X(hs), Y(sunH)); ctx.lineTo(X(hs), Y(0)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+    ctx.textAlign = 'left'; ctx.fillStyle = C.accent; ctx.fillText('■ your LED through the lens, ' + fmt(r.appW, 2) + '° wide', m.l, 12);
+    ctx.fillStyle = C.sun; ctx.fillText('┄ the sun, 0.53° wide', m.l + 230 > W ? m.l : m.l + 240, m.l + 230 > W ? 24 : 12);
+    $('#appText').textContent = 'Both shapes have equal area (the same total light). A narrower shape means a smaller source in the sky, so harder shadows and a sharper glare spot. The lens cannot make the LED look smaller than D÷f.';
+  }
+  function renderProfiles() {
+    const r = res; if (r.empty) return;
+    const P = r.prof, maxV = Math.max(Math.max.apply(null, P.exit), Math.max.apply(null, P.wall)) * 1.1 || 1;
+    area($('#profExit'), P.exit, P.RE, maxV, P.Hw); area($('#profWall'), P.wall, P.RW, maxV, P.HwWall);
+    $('#wallTitle').textContent = 'On the wall, ' + fmt(state.wall, 3) + ' mm away';
+    $('#profText').textContent = 'Height is the share of the LED’s light per millimetre, same scale on both. The beam gets wider with distance and its height drops by the same factor: the light is conserved, the irradiance is not. Dashed lines mark the edge that holds 99% of the light.';
+  }
+  function area(cv, vals, R, maxV, edge) {
+    const { ctx, W, H } = prep(cv), C = css(), m = { l: 10, r: 10, t: 10, b: 22 }, pw = W - m.l - m.r, ph = H - m.t - m.b, B = vals.length;
+    ctx.clearRect(0, 0, W, H);
+    const X = (y) => m.l + (y + R) / (2 * R) * pw, Y = (v) => m.t + ph - v / maxV * ph;
+    ctx.strokeStyle = C.line; ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textAlign = 'center';
+    ctx.beginPath(); ctx.moveTo(m.l, m.t + ph + 0.5); ctx.lineTo(m.l + pw, m.t + ph + 0.5); ctx.stroke();
+    const st = niceStep(R / 2);
+    for (let y = -Math.floor(R / st) * st; y <= R + 1e-9; y += st) { ctx.fillText(fmt(y, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''), X(y), H - 6); ctx.beginPath(); ctx.moveTo(X(y), m.t + ph); ctx.lineTo(X(y), m.t + ph + 4); ctx.stroke(); }
+    ctx.textAlign = 'right'; ctx.fillText('mm', W - 4, H - 6);
+    ctx.beginPath(); ctx.moveTo(X(-R), Y(0));
+    for (let b = 0; b < B; b++) { const y0 = -R + b * 2 * R / B, y1 = -R + (b + 1) * 2 * R / B; ctx.lineTo(X(y0), Y(vals[b])); ctx.lineTo(X(y1), Y(vals[b])); }
+    ctx.lineTo(X(R), Y(0)); ctx.closePath(); ctx.globalAlpha = 0.35; ctx.fillStyle = C.accent; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
+    ctx.strokeStyle = C.muted; ctx.setLineDash([4, 4]); [-edge, edge].forEach((e) => { ctx.beginPath(); ctx.moveTo(X(e), m.t); ctx.lineTo(X(e), m.t + ph); ctx.stroke(); }); ctx.setLineDash([]);
+  }
+
+  /* ---------- helper + notes ---------- */
+  function renderAssist() {
+    const t = state.target * D2R / 2, f = (state.ledD / 2) / Math.tan(t), D = state.lenses[0].D;
+    const al = Math.atan((D / 2) / f), cap = Math.pow(Math.sin(al), 2);
+    const d50 = 2 * f, d80 = 2 * f * Math.tan(Math.asin(Math.sqrt(0.8)));
+    $('#assistOut').innerHTML = 'For a ' + fmt(state.target, 2) + '° beam from a ' + fmt(state.ledD) + ' mm LED, the ideal lens needs <b>f ≈ ' + fmt(f) + ' mm</b>. With lens 1 at Ø' + fmt(D) + ' mm it would catch about <b>' + fmt(cap * 100, 1) + '%</b> of the light. Catching 50% takes Ø ≈ ' + fmt(d50) + ' mm, and 80% takes Ø ≈ ' + fmt(d80) + ' mm.';
+  }
+  function renderNotes() {
+    const r = res, ul = $('#notes'); if (r.empty) { ul.innerHTML = ''; return; }
+    const items = [];
+    const needL = SUN.lux / (Math.PI * Math.pow(Math.sin(r.th95 * D2R), 2));
+    items.push('<b>Brightness is set by the LED and the beam angle, not by the lens.</b> The most the optics can do is the LED’s luminance × π × sin²(beam half angle). Here that is ' + fmtLux(r.Elimit).join(' ') + ', and you get ' + fmtLux(r.Ecenter).join(' ') + ' at the centre.');
+    items.push('<b>Sunlike hardness costs brightness.</b> A ' + fmt(r.beamFull, 2) + '° beam would need an LED of ' + fmt(needL / 1e6) + ' Mcd/m² to reach 100 klx. Yours is ' + fmt(r.Lled / 1e6) + ' Mcd/m², so the ceiling is ' + fmt(r.Elimit / SUN.lux * 100, 1) + '% of the sun.');
+    items.push('<b>A bigger lens gives a bigger beam with the same lux.</b> It catches more of the LED’s light, and spreads that extra light over a proportionally larger area. Use the sweep over lens diameter to see the lux stay flat while the delivered lumens climb.');
+    items.push('<b>A longer focal length sharpens the beam and costs light.</b> Doubling f halves the source size seen through the lens (harder shadows) and cuts what a fixed-size lens catches to about a quarter. The lux stays about the same.');
+    items.push('<b>More lenses never beat etendue.</b> Each glass surface loses about 4% to reflection, so extra lenses only pay off when one lens cannot collect and shape the light by itself. A short, wide first lens collects more, and a pair expands the beam to cut its angle. Try “Collimate, then expand”.');
+    if (state.dome.on) items.push('<b>A dome is a first lens built into the LED.</b> It adds light extraction, but makes the source look ' + fmt(state.dome.n, 3) + '× wider and ' + fmt(state.dome.n * state.dome.n, 3) + '× dimmer to the lens behind it. A bigger apparent source means softer shadows for the same focal length.');
+    if (state.lenses.some((L) => L.on && L.kind.indexOf('fresnel') === 0)) items.push('<b>Fresnel lenses are thin and cheap but leaky.</b> Light that hits a groove riser is lost or sent into stray angles. The tool estimates this from the groove height and ray angle, so real lenses can differ.');
+    ul.innerHTML = items.map((t) => '<li>' + t + '</li>').join('');
+  }
+
+  /* ---------- sweep ---------- */
+  function runSweep() {
+    const p = params(), w = state.sweep, xs = [], M = 34;
+    let lo, hi;
+    if (w === 'f') { lo = Math.max(1, state.lenses[0].f / 5); hi = state.lenses[0].f * 5; }
+    else if (w === 'D') { lo = Math.max(1, state.lenses[0].D / 5); hi = state.lenses[0].D * 3; }
+    else { lo = Math.max(0.2, state.ledD / 4); hi = state.ledD * 4; }
+    for (let i = 0; i < M; i++) xs.push(lo * Math.pow(hi / lo, i / (M - 1)));
+    sweepData = { w: w, rows: E.sweep(p, w, xs, 3500) };
+    renderSweep();
+  }
+  function renderSweep() {
+    if (!sweepData || !res) return;
+    const w = sweepData.w, rows = sweepData.rows, xs = rows.map((r) => r.x);
+    const cur = w === 'f' ? state.lenses[0].f : w === 'D' ? state.lenses[0].D : state.ledD;
+    const xl = w === 'f' ? 'focal length f₁ (mm)' : w === 'D' ? 'lens Ø D₁ (mm)' : 'LED Ø (mm)';
+    line($('#swEta'), xs, rows.map((r) => r.eta), { title: 'Light delivered (%)', xl: xl, mark: cur, my: res.empty ? 0 : res.eta3 * 100, ylog: false });
+    line($('#swAng'), xs, rows.map((r) => r.ang), { title: 'Beam full angle (°)', xl: xl, mark: cur, my: res.beamFull, ylog: true });
+    line($('#swLux'), xs, rows.map((r) => r.Ec), { title: 'Centre brightness (lx)', xl: xl, mark: cur, my: res.Ecenter, ylog: true, ref: SUN.lux, refL: 'sun 100 klx' });
+    line($('#swPen'), xs, rows.map((r) => r.pen), { title: 'Shadow edge blur (mm per m)', xl: xl, mark: cur, my: res.penumbra, ylog: true, ref: SUN.penumbraMmPerM, refL: 'sun 9.3' });
+  }
+  function line(cv, xs, ys, o) {
+    const { ctx, W, H } = prep(cv), C = css(), m = { l: 8, r: 8, t: 22, b: 30 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    ctx.clearRect(0, 0, W, H);
+    const good = ys.filter((v) => isFinite(v) && (!o.ylog || v > 0));
+    ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textAlign = 'left'; ctx.fillText(o.title, m.l, 12);
+    if (good.length < 2) { ctx.fillText('no data', m.l, H / 2); return; }
+    let lo = Math.min.apply(null, good), hi = Math.max.apply(null, good);
+    if (o.ref) { lo = Math.min(lo, o.ref); hi = Math.max(hi, o.ref); }
+    if (isFinite(o.my) && o.my > 0) { lo = Math.min(lo, o.my); hi = Math.max(hi, o.my); }
+    if (o.ylog) { lo = Math.log10(lo) - 0.08; hi = Math.log10(hi) + 0.08; } else { lo = 0; hi = hi * 1.08; }
+    if (hi - lo < 1e-9) hi = lo + 1;
+    const tf = (v) => o.ylog ? Math.log10(Math.max(v, 1e-12)) : v;
+    const lx0 = Math.log(xs[0]), lx1 = Math.log(xs[xs.length - 1]);
+    const X = (x) => m.l + (Math.log(x) - lx0) / (lx1 - lx0) * pw, Y = (v) => m.t + ph - (tf(v) - lo) / (hi - lo) * ph;
+    ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(m.l, m.t + ph + 0.5); ctx.lineTo(m.l + pw, m.t + ph + 0.5); ctx.stroke();
+    ctx.textAlign = 'center';
+    [xs[0], Math.sqrt(xs[0] * xs[xs.length - 1]), xs[xs.length - 1]].forEach((x, i) => { ctx.textAlign = i === 0 ? 'left' : i === 2 ? 'right' : 'center'; ctx.fillText(fmt(x, 3), X(x) + (i === 0 ? -0 : 0), H - 16); });
+    ctx.textAlign = 'center'; ctx.fillText(o.xl, W / 2, H - 4);
+    if (o.ref) { ctx.strokeStyle = C.sun; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(m.l, Y(o.ref)); ctx.lineTo(m.l + pw, Y(o.ref)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = C.sun; ctx.textAlign = 'right'; ctx.fillText(o.refL, m.l + pw, Y(o.ref) - 4); }
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath(); let started = false;
+    xs.forEach((x, i) => { const v = ys[i]; if (!isFinite(v) || (o.ylog && v <= 0)) { started = false; return; } started ? ctx.lineTo(X(x), Y(v)) : ctx.moveTo(X(x), Y(v)); started = true; });
+    ctx.stroke(); ctx.lineWidth = 1;
+    // value labels
+    ctx.fillStyle = C.muted; ctx.textAlign = 'right';
+    const topV = o.ylog ? Math.pow(10, hi) : hi, botV = o.ylog ? Math.pow(10, lo) : 0;
+    ctx.fillText(fmt(topV, 2), m.l + pw, m.t + 10); ctx.fillText(fmt(botV, 2), m.l + pw, m.t + ph - 4);
+    if (o.mark >= xs[0] && o.mark <= xs[xs.length - 1] && isFinite(o.my) && o.my > 0) {
+      ctx.strokeStyle = C.muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(X(o.mark), m.t); ctx.lineTo(X(o.mark), m.t + ph); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = C.ink; ctx.strokeStyle = C.stage; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(o.mark), Y(o.my), 4.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1;
+    }
+  }
+
+  /* ---------- boot ---------- */
+  function boot() {
+    buildControls(); stageEvents(); syncAll();
+    $('#sweepVar').value = state.sweep;
+    schedule();
+    window.addEventListener('resize', () => { renderStage(); renderApparent(); renderProfiles(); renderSweep(); });
+    if (window.ResizeObserver) new ResizeObserver(() => { renderStage(); }).observe($('#stage'));
+    const rerender = () => { renderStage(); renderLegend(); renderBudget(); renderApparent(); renderProfiles(); renderSweep(); };
+    if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rerender);
+    new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(rerender);
+  }
+  boot();
+})();
+
+</script>
+
+</body>
+</html>
