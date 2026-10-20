@@ -26,3 +26,6 @@ Efficiency, lux and luminance are estimates for a round LED and round lenses, co
 - `src/index.template.html` page and styles
 - `python3 build.py` rebuilds `index.html`
 - `node test/engine-check.js` prints efficiency, beam angle and etendue for several setups
+
+## Reflectors and TIR (v3)
+Primary optics: flashlight parabolic reflector (with hole at the base), cone, CPC and a TIR collimator. Statistics now come from a full 3D skew-ray trace; brightness, source size and shadow blur are measured on the wall at the chosen distance.

@@ -6,13 +6,25 @@
   /* ---------- state ---------- */
   const lens = (on, kind, f, D) => ({ on: on, kind: kind, f: f, D: D, trim: 0, pitch: 0.5, free: false, gap: 30 });
   const DOME0 = { on: false, R: 5, hr: 1, n: 1.41 };
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const PRIM0 = {
+    type: 'none', rho: 0.92,
+    parab: { fp: 3, rim: 50, hole: 12, fz: 0, k: -1 },
+    cone: { alpha: 8, len: 40 },
+    cpc: { theta: 12, lenFrac: 1 },
+    tir: { rc: 5, hc: 10, rb: 6.5 }
+  };
   const state = {
-    n: 1.49, ledD: 3, flux: 1000, wall: 800, target: SUN.angDeg, dome: Object.assign({}, DOME0), colorMode: 'led', sweep: 'f',
+    n: 1.49, ledD: 3, flux: 1000, wall: 800, target: SUN.angDeg, dome: Object.assign({}, DOME0), prim: clone(PRIM0), colorMode: 'led', sweep: 'f',
     lenses: [lens(true, 'asphC', 35, 50), lens(false, 'asphF', 20, 34), lens(false, 'asphC', 80, 124)]
   };
   const PRESETS = [
     { name: 'Flashlight', set: { ledD: 3, flux: 1000, wall: 800, l: [[1, 'asphC', 35, 50], [0], [0]] } },
     { name: 'Sun-like beam', set: { ledD: 3, flux: 1000, wall: 1500, l: [[1, 'asphC', 322, 80], [0], [0]] } },
+    { name: 'Flashlight reflector', set: { ledD: 3, flux: 1000, wall: 800, prim: { type: 'parab' }, l: [[0], [0], [0]] } },
+    { name: 'Cone reflector', set: { ledD: 3, flux: 1000, wall: 800, prim: { type: 'cone' }, l: [[0], [0], [0]] } },
+    { name: 'CPC reflector', set: { ledD: 3, flux: 1000, wall: 800, prim: { type: 'cpc' }, l: [[0], [0], [0]] } },
+    { name: 'TIR collimator', set: { ledD: 3, flux: 1000, wall: 800, prim: { type: 'tir' }, l: [[0], [0], [0]] } },
     { name: 'Plastic Fresnel lens', set: { ledD: 3, flux: 1000, wall: 1500, l: [[1, 'fresnelC', 100, 100, { pitch: 0.5 }], [0], [0]] } },
     { name: 'Domed 5 mm LED', set: { ledD: 0.3, flux: 20, wall: 800, dome: { on: true, R: 2.5, hr: 2.8, n: 1.53 }, l: [[0], [0], [0]] } },
     { name: 'Domed LED + lens', set: { ledD: 1, flux: 300, wall: 800, dome: { on: true, R: 3, hr: 1, n: 1.41 }, l: [[1, 'asphC', 35, 50], [0], [0]] } },
@@ -51,7 +63,7 @@
     const cs = getComputedStyle(document.documentElement), g = (n) => cs.getPropertyValue(n).trim();
     return { stage: g('--stage'), grid: g('--grid'), ink: g('--ink'), muted: g('--muted'), line: g('--line'), accent: g('--accent'),
       sun: g('--sun'), glass: g('--glass'), led: g('--led'), good: g('--good'), warn: g('--warn'), lost: g('--lost'), lost2: g('--lost2'),
-      panel2: g('--panel2'), r: [g('--r0'), g('--r1'), g('--r2'), g('--r3'), g('--r4')], mono: g('--font-mono') || 'monospace' };
+      mirror: g('--mirror'), panel2: g('--panel2'), r: [g('--r0'), g('--r1'), g('--r2'), g('--r3'), g('--r4')], mono: g('--font-mono') || 'monospace' };
   };
   function prep(cv) {
     const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
@@ -113,6 +125,11 @@
       $('label span', fBox).textContent = neg ? 'Focal length |f| (negative lens)' : 'Focal length f';
       $('label span', dBox).textContent = ball ? 'Ball diameter Ø' : 'Diameter Ø';
       note.hidden = !!L.free;
+      const prim = state.prim.type !== 'none';
+      if (idx === 0) {
+        $('label span', gBox).textContent = prim ? 'Gap behind the reflector or TIR optic' : 'Distance from LED chip to lens';
+        note.textContent = prim ? 'Automatic: 1 mm in front of the reflector or TIR optic. Trim shifts the lens from there.' : 'Automatic: the LED sits in the focal point. Trim shifts the lens from there.';
+      }
     }
     syncers.push(() => { sel.value = L.kind; cb.checked = L.on; frCb.checked = !!L.free; refresh(); });
     lensUI.push({ info: info, L: L });
@@ -131,6 +148,9 @@
       b.addEventListener('click', () => {
         const s = p.set; state.ledD = s.ledD; state.flux = s.flux; state.wall = s.wall; state.n = 1.49;
         state.dome = Object.assign({}, DOME0, s.dome || {});
+        const fresh = clone(PRIM0);
+        Object.keys(fresh).forEach((k) => { if (typeof fresh[k] === 'object') Object.assign(state.prim[k], fresh[k]); else state.prim[k] = fresh[k]; });
+        if (s.prim) { state.prim.type = s.prim.type; if (s.prim.rho != null) state.prim.rho = s.prim.rho; Object.assign(state.prim[s.prim.type], s.prim.v || {}); }
         s.l.forEach((x, i) => {
           const L = state.lenses[i];
           Object.assign(L, { on: !!x[0], trim: 0, free: false, gap: 30, pitch: 0.5 });
@@ -151,6 +171,7 @@
     dsel.addEventListener('change', () => { state.dome.n = parseFloat(dsel.value); schedule(); });
     dome.appendChild(dsel);
     syncers.push(() => { $('#domeOn').checked = state.dome.on; dome.hidden = !state.dome.on; dsel.value = String(state.dome.n); });
+    buildPrimary();
     const mat = $('#material');
     E.MATERIALS.forEach((m) => { const o = document.createElement('option'); o.value = m.n; o.textContent = m.name; mat.appendChild(o); });
     mat.addEventListener('change', () => { state.n = parseFloat(mat.value); schedule(); });
@@ -170,13 +191,57 @@
     $('#fitLed').addEventListener('click', () => fit('led'));
     $('#fitWall').addEventListener('click', () => fit('wall'));
   }
+  function buildPrimary() {
+    const P = state.prim, sel = $('#primType');
+    E.PRIMARIES.forEach((t) => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; sel.appendChild(o); });
+    const rhoBox = control($('#primRho'), { label: 'Mirror reflectivity', unit: '%', min: 50, max: 100, hardMin: 5, hardMax: 100, get: () => P.rho * 100, set: (v) => { P.rho = v / 100; } });
+    const g = { parab: $('#primParab'), cone: $('#primCone'), cpc: $('#primCpc'), tir: $('#primTir') };
+    const fp = P.parab, cn = P.cone, cp = P.cpc, ti = P.tir;
+    control(g.parab, { label: 'Parabola focal length', unit: 'mm', min: 1, max: 40, log: true, hardMin: 0.3, hardMax: 200, get: () => fp.fp, set: (v) => { fp.fp = v; } });
+    control(g.parab, { label: 'Rim diameter', unit: 'mm', min: 10, max: 200, log: true, hardMin: 2, hardMax: 1000, get: () => fp.rim, set: (v) => { fp.rim = v; } });
+    control(g.parab, { label: 'Hole diameter at the base', unit: 'mm', min: 2, max: 100, log: true, hardMin: 0.1, hardMax: 500, get: () => fp.hole, set: (v) => { fp.hole = v; } });
+    control(g.parab, { label: 'Focus position (+ is toward the opening)', unit: 'mm', min: -10, max: 10, hardMin: -100, hardMax: 100, get: () => fp.fz, set: (v) => { fp.fz = v; } });
+    control(g.parab, { label: 'Conic constant (−1 is a parabola)', unit: '', min: -2, max: 0.5, hardMin: -6, hardMax: 0.95, get: () => fp.k, set: (v) => { fp.k = v; } });
+    control(g.cone, { label: 'Wall tilt from the axis', unit: '°', min: 0, max: 45, hardMin: 0, hardMax: 70, get: () => cn.alpha, set: (v) => { cn.alpha = v; } });
+    control(g.cone, { label: 'Length', unit: 'mm', min: 5, max: 200, log: true, hardMin: 1, hardMax: 1000, get: () => cn.len, set: (v) => { cn.len = v; } });
+    control(g.cpc, { label: 'Design half angle of the beam', unit: '°', min: 2, max: 40, log: true, hardMin: 1, hardMax: 70, get: () => cp.theta, set: (v) => { cp.theta = v; } });
+    control(g.cpc, { label: 'Length (100% is the full CPC)', unit: '%', min: 10, max: 100, hardMin: 10, hardMax: 100, get: () => cp.lenFrac * 100, set: (v) => { cp.lenFrac = v / 100; } });
+    control(g.tir, { label: 'Cavity radius around the LED', unit: 'mm', min: 1.5, max: 20, log: true, hardMin: 0.2, hardMax: 100, get: () => ti.rc, set: (v) => { ti.rc = v; } });
+    control(g.tir, { label: 'Cavity height', unit: 'mm', min: 1, max: 30, log: true, hardMin: 0.5, hardMax: 100, get: () => ti.hc, set: (v) => { ti.hc = v; } });
+    control(g.tir, { label: 'Base radius of the outer wall', unit: 'mm', min: 2, max: 40, log: true, hardMin: 0.5, hardMax: 200, get: () => ti.rb, set: (v) => { ti.rb = v; } });
+    sel.addEventListener('change', () => { P.type = sel.value; syncAll(); schedule(); fit('optics'); });
+    syncers.push(() => {
+      sel.value = P.type; $('#primBody').hidden = P.type === 'none';
+      Object.keys(g).forEach((k) => { g[k].hidden = P.type !== k; });
+      rhoBox.hidden = P.type === 'tir';
+      $('#primHelp').textContent = PRIM_HELP[P.type] || '';
+    });
+  }
+  const PRIM_HELP = {
+    parab: 'The LED sits in the hole at the base, at the focus. Light leaving at wide angles hits the mirror and goes out parallel. Light close to the axis misses the mirror and leaves as spill. A hole diameter of 4 × the focal length makes the mirror start exactly at the LED.',
+    cone: 'Each bounce off a straight wall turns a ray toward the axis by twice the wall tilt. It narrows the beam but does not collimate it cleanly.',
+    cpc: 'Shaped so that every ray from the LED ends up inside the design angle. Exit diameter × sin(angle) equals the LED diameter, so no brightness is wasted. Shorten it to see what the missing length costs.',
+    tir: 'A solid optic. The centre surface is a lens for light near the axis. Steeper light enters the cavity side wall, reflects off the outer wall by total internal reflection and leaves parallel. The wall is shaped for a point source, so a larger LED widens the beam. Material follows the lens material setting.'
+  };
+  function renderPrimInfo() {
+    const q = paths.sys.prim, el = $('#primInfo');
+    if (!q) { el.textContent = ''; return; }
+    if (q.type === 'parab') el.textContent = 'Rim Ø' + fmt(q.rimD) + ' mm · depth ' + fmt(q.depth) + ' mm · hole Ø' + fmt(q.holeD) + ' mm · catches rays wider than ' + fmt(q.catchDeg, 3) + '° from the axis' + (q.behind ? ' · mirror reaches behind the LED plane' : '');
+    else if (q.type === 'cone') el.textContent = 'Exit Ø' + fmt(q.rimD) + ' mm · length ' + fmt(q.depth) + ' mm · catches rays wider than ' + fmt(q.catchDeg, 3) + '° from the axis';
+    else if (q.type === 'cpc') el.textContent = 'Exit Ø' + fmt(q.rimD) + ' mm · length ' + fmt(q.depth) + ' mm' + (q.truncated ? ' (full CPC: ' + fmt(q.fullLen) + ' mm)' : '') + ' · exit Ø × sin ' + fmt(q.thetaDeg, 3) + '° = ' + fmt(q.rimD * Math.sin(q.thetaDeg * D2R)) + ' mm vs LED Ø' + fmt(q.entryD) + ' mm';
+    else if (q.type === 'tir') el.textContent = 'Outer Ø' + fmt(q.rimD) + ' mm · height ' + fmt(q.depth) + ' mm · centre lens takes ±' + fmt(q.lensDeg, 3) + '°, the TIR wall takes the rest';
+  }
   function syncAll() { syncers.forEach((s) => s()); }
   function setColorMode(m) {
     state.colorMode = m;
     $('#cmLed').setAttribute('aria-pressed', m === 'led'); $('#cmFate').setAttribute('aria-pressed', m === 'fate');
     renderStage(); renderLegend();
   }
-  const params = () => ({ n: state.n, ledD: state.ledD, flux: state.flux, wall: state.wall, dome: state.dome, lenses: state.lenses });
+  const params = () => {
+    const pr = state.prim;
+    return { n: state.n, ledD: state.ledD, flux: state.flux, wall: state.wall, dome: state.dome, lenses: state.lenses,
+      prim: pr.type === 'none' ? { type: 'none' } : Object.assign({ type: pr.type, rho: pr.rho }, pr[pr.type]) };
+  };
 
   /* ---------- run loop ---------- */
   let pending = false, res = null, paths = null, sweepTimer = 0, sweepData = null;
@@ -186,14 +251,14 @@
     const p = params();
     res = E.analyze(p, 20000);
     paths = E.rayPaths(p, 28);
-    renderStage(); renderLegend(); renderWarns(); renderKpis(); renderBudget(); renderApparent(); renderProfiles(); renderAssist(); renderNotes(); renderLedInfo(); renderLensInfo();
+    renderStage(); renderLegend(); renderWarns(); renderKpis(); renderBudget(); renderApparent(); renderProfiles(); renderAssist(); renderNotes(); renderLedInfo(); renderLensInfo(); renderPrimInfo();
     clearTimeout(sweepTimer); sweepTimer = setTimeout(runSweep, 160);
   }
 
   /* ---------- stage ---------- */
   const view = { cz: 40, cy: 0, s: 5, set: false };
   function fit(mode) {
-    const cv = $('#stage'), W = cv.clientWidth, H = cv.clientHeight, sys = paths ? paths.sys : E.buildSystem(params());
+    const cv = $('#stage'), W = cv.clientWidth, H = cv.clientHeight, sys = E.buildSystem(params());
     let z0, z1, yh;
     if (mode === 'led') { yh = state.ledD * 1.3; z0 = -state.ledD * 0.8; z1 = z0 + (W / H) * 2 * yh; }
     else if (mode === 'wall') { z0 = -0.03 * sys.wallZ; z1 = sys.wallZ * 1.02; yh = Math.max(sys.hLast * 1.15, 5, (sys.wallZ * 0.04)); }
@@ -268,6 +333,17 @@
     ctx.restore();
     // lenses and dome
     sys.polys.forEach((P) => {
+      if (P.mirror) {
+        ctx.strokeStyle = C.mirror; ctx.lineWidth = 3.5; ctx.lineJoin = 'round'; ctx.beginPath();
+        P.pts.forEach((q, j) => { const x = X(q[0]), y = Y(q[1]); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.stroke(); ctx.lineWidth = 1;
+        return;
+      }
+      if (P.solid) {
+        ctx.beginPath(); P.loop.forEach((q, j) => { const x = X(q[0]), y = Y(q[1]); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath();
+        ctx.globalAlpha = 0.2; ctx.fillStyle = C.glass; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.glass; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
+        return;
+      }
       if (P.dome) {
         ctx.beginPath(); P.loop.forEach((q, j) => { const x = X(q[0]), y = Y(q[1]); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath();
         ctx.globalAlpha = 0.16; ctx.fillStyle = C.glass; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.glass; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
@@ -308,7 +384,7 @@
     if (state.colorMode === 'led') {
       lg.innerHTML = ['LED edge (top)', '', 'LED centre', '', 'LED edge (bottom)'].map((t, i) => t ? '<span><i style="background:' + C.r[i] + '"></i>' + t + '</span>' : '').join('') + '<span>Each colour is one point on the LED. A collimator turns each point into a parallel bundle.</span>';
     } else {
-      lg.innerHTML = '<span><i style="background:' + C.led + '"></i>Leaves the last lens</span><span><i style="background:' + C.lost + '"></i>Misses a lens (lost)</span><span><i style="background:' + C.lost2 + '"></i>Total internal reflection (lost)</span>';
+      lg.innerHTML = '<span><i style="background:' + C.led + '"></i>Leaves the last lens</span><span><i style="background:' + C.lost + '"></i>Misses an optic or escapes backwards (lost)</span><span><i style="background:' + C.lost2 + '"></i>Total internal reflection (lost)</span>';
     }
   }
   function renderWarns() {
@@ -327,13 +403,13 @@
     const pos = Math.min(1, Math.max(0, (Math.log10(Math.max(ratio, 1e-6)) + 2) / 3)) * 100, sunPos = 2 / 3 * 100;
     const soft = r.appW / SUN.angDeg;
     const cards = [
-      ['Light delivered', fmt(r.eta3 * 100, 1) + '<small>%</small>', fmt(state.flux * r.eta3) + ' of ' + fmt(state.flux) + ' lm · 2D slice shows ' + fmt(r.eta2 * 100, 1) + '%'],
-      ['Beam centre brightness', lux[0] + '<small>' + lux[1] + '</small>', '= ' + fmt(ratio * 100, 2) + '% of full sunlight · beam average ' + mean[0] + ' ' + mean[1] +
+      ['Light delivered', fmt(r.eta3 * 100, 1) + '<small>%</small>', fmt(state.flux * r.eta3) + ' of ' + fmt(state.flux) + ' lm reach the beam'],
+      ['Brightness at the wall centre', lux[0] + '<small>' + lux[1] + '</small>', '= ' + fmt(ratio * 100, 2) + '% of full sunlight · average over the whole lit area ' + mean[0] + ' ' + mean[1] +
         '<div class="bar" title="log scale, sun marked"><b style="width:' + pos.toFixed(1) + '%"></b><u style="left:' + sunPos.toFixed(1) + '%"></u></div>'],
-      ['Source size seen from the beam', fmt(r.appW, 2) + '<small>°</small>', 'Sun is 0.53° · this is ' + (soft >= 1 ? fmt(soft, 2) + '× wider (softer shadows)' : fmt(1 / soft, 2) + '× narrower (harder shadows)')],
+      ['Source size seen from the wall', fmt(r.appW, 2) + '<small>°</small>', 'Sun is 0.53° · this is ' + (soft >= 1 ? fmt(soft, 2) + '× wider (softer shadows)' : fmt(1 / soft, 2) + '× narrower (harder shadows)')],
       ['Shadow edge blur', fmt(r.penumbra, 2) + '<small>mm per m</small>', 'Sun: ' + SUN.penumbraMmPerM + ' mm per metre between object and surface'],
-      ['Beam size and spread', '⌀ ' + fmt(2 * r.Hw, 3) + '<small>mm</small>', 'Full angle ' + fmt(r.beamFull, 2) + '° holds 95% of the light'],
-      ['Beam evenness', isFinite(r.flatCV) ? fmt(r.flatCV * 100, 1) + '<small>% ripple</small>' : '–', 'Spread of brightness across the middle 80% of the beam. Lower is flatter.']
+      ['Beam size and spread', '⌀ ' + fmt(2 * r.Hww, 3) + '<small>mm</small>', 'On the wall. Full angle ' + fmt(r.beamFull, 2) + '° holds 95% of the light, half of it within ±' + fmt(r.th50, 2) + '°'],
+      ['Beam evenness', isFinite(r.flatCV) ? fmt(r.flatCV * 100, 1) + '<small>% ripple</small>' : '–', 'Brightness variation over the area holding the central 80% of the light on the wall. Lower is flatter.']
     ];
     k.innerHTML = cards.map((c) => '<div class="kpi"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div><div class="s">' + c[2] + '</div></div>').join('');
   }
@@ -347,12 +423,14 @@
       '<div class="split" role="img" aria-label="Light budget"><span style="width:' + dl * 100 + '%;background:' + C.accent + '"></span><span style="width:' + fr * 100 + '%;background:' + C.warn + '"></span><span style="width:' + ms * 100 + '%;background:' + C.lost + '"></span></div>' +
       '<dl class="rows">' +
       '<dt><span style="color:' + C.accent + '">■</span> Delivered into the beam</dt><dd>' + e(F * dl) + ' lm</dd>' +
-      '<dt><span style="color:' + C.warn + '">■</span> Lost to reflections and groove risers</dt><dd>' + e(F * fr) + ' lm</dd>' +
-      '<dt><span style="color:' + C.lost + '">■</span> Never reached the lens</dt><dd>' + e(F * ms) + ' lm</dd>' +
+      '<dt><span style="color:' + C.warn + '">■</span> Lost to mirror absorption, glass reflections and grooves</dt><dd>' + e(F * fr) + ' lm</dd>' +
+      '<dt><span style="color:' + C.lost + '">■</span> Lost: missed an optic or escaped backwards</dt><dd>' + e(F * ms) + ' lm</dd>' +
+      (state.prim.type === 'none' ? '' : '<dt>' + (state.prim.type === 'tir' ? 'Through the centre lens' : 'Straight out, not redirected by the mirror') + '</dt><dd>' + e(F * r.fDirect) + ' lm</dd>' +
+        '<dt>' + (state.prim.type === 'tir' ? 'Via the TIR wall' : 'Redirected by the mirror') + '</dt><dd>' + e(F * r.fRedirect) + ' lm</dd>') +
       '</dl><dl class="rows" style="border-top:1px solid var(--line);padding-top:8px">' +
       '<dt>LED luminance</dt><dd>' + e(r.Lled / 1e6) + ' Mcd/m²</dd>' +
       '<dt>Sun luminance</dt><dd>' + e(SUN.lum / 1e6) + ' Mcd/m²</dd>' +
-      '<dt>Brightest possible at this beam angle</dt><dd>' + fmtLux(r.Elimit).join(' ') + '</dd>' +
+      '<dt>Brightest possible at the beam centre (etendue limit)</dt><dd>' + fmtLux(r.Elimit).join(' ') + '</dd>' +
       '<dt>What the optics deliver at the centre</dt><dd>' + fmtLux(r.Ecenter).join(' ') + '</dd>' +
       '<dt>LED luminance needed for 100 klx at this angle</dt><dd>' + e(needL / 1e6) + ' Mcd/m²</dd>' +
       '<dt>Etendue captured from the LED</dt><dd>' + e(r.Gcap) + ' mm²·sr</dd>' +
@@ -363,43 +441,56 @@
     const cv = $('#appChart'), { ctx, W, H } = prep(cv), C = css(), r = res;
     ctx.clearRect(0, 0, W, H);
     if (r.empty) return;
-    const a = r.app, R = a.range, m = { l: 10, r: 10, t: 26, b: 22 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const sunH = 1 / SUN.angDeg, maxV = Math.max(sunH, Math.max.apply(null, a.h)) * 1.1;
-    const X = (d) => m.l + (d + R) / (2 * R) * pw, Y = (v) => m.t + ph - v / maxV * ph;
-    ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(m.l, m.t + ph + 0.5); ctx.lineTo(m.l + pw, m.t + ph + 0.5); ctx.stroke();
-    ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textAlign = 'center';
+    const a = r.app, R = a.range, m = { l: 40, r: 10, t: 10, b: 22 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const sunL = SUN.lum / 1e6, ymin = 1, ymax = Math.max(sunL, Math.max.apply(null, a.L)) * 1.5;
+    const lg = (v) => Math.log10(Math.max(v, ymin));
+    const X = (d) => m.l + (d + R) / (2 * R) * pw, Y = (v) => m.t + ph - (lg(v) - lg(ymin)) / (lg(ymax) - lg(ymin)) * ph;
+    ctx.font = '10.5px ' + C.mono; ctx.lineWidth = 1;
+    for (let e = 0; Math.pow(10, e) <= ymax; e++) {
+      const v = Math.pow(10, e), y = Math.round(Y(v)) + 0.5;
+      ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(m.l + pw, y); ctx.stroke();
+      ctx.fillStyle = C.muted; ctx.textAlign = 'right'; ctx.fillText(v >= 1000 ? (v / 1000) + 'G' : v + 'M', m.l - 4, y + 3);
+    }
+    ctx.fillStyle = C.muted; ctx.textAlign = 'center';
     const st = niceStep(R / 2.5);
-    for (let d = -Math.floor(R / st) * st; d <= R + 1e-9; d += st) { ctx.fillText(fmt(d, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') + '°', X(d), H - 6); ctx.beginPath(); ctx.moveTo(X(d), m.t + ph); ctx.lineTo(X(d), m.t + ph + 4); ctx.stroke(); }
-    // led
-    ctx.beginPath(); ctx.moveTo(X(-R), Y(0));
-    for (let b = 0; b < a.AB; b++) { const x0 = X(-R + b * 2 * R / a.AB), x1 = X(-R + (b + 1) * 2 * R / a.AB); ctx.lineTo(x0, Y(a.h[b])); ctx.lineTo(x1, Y(a.h[b])); }
-    ctx.lineTo(X(R), Y(0)); ctx.closePath(); ctx.globalAlpha = 0.35; ctx.fillStyle = C.accent; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.stroke();
-    // sun
+    for (let d = -Math.floor(R / st) * st; d <= R + 1e-9; d += st) {
+      ctx.fillText(fmt(d, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') + '°', X(d), H - 6);
+    }
+    ctx.beginPath(); ctx.moveTo(X(-a.edges[a.AB]), Y(ymin));
+    for (let b = a.AB - 1; b >= 0; b--) { ctx.lineTo(X(-a.edges[b + 1]), Y(a.L[b])); ctx.lineTo(X(-a.edges[b]), Y(a.L[b])); }
+    for (let b = 0; b < a.AB; b++) { ctx.lineTo(X(a.edges[b]), Y(a.L[b])); ctx.lineTo(X(a.edges[b + 1]), Y(a.L[b])); }
+    ctx.lineTo(X(a.edges[a.AB]), Y(ymin)); ctx.closePath();
+    ctx.globalAlpha = 0.35; ctx.fillStyle = C.accent; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.stroke();
     const hs = SUN.angDeg / 2; ctx.strokeStyle = C.sun; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
-    ctx.beginPath(); ctx.moveTo(X(-hs), Y(0)); ctx.lineTo(X(-hs), Y(sunH)); ctx.lineTo(X(hs), Y(sunH)); ctx.lineTo(X(hs), Y(0)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
-    ctx.textAlign = 'left'; ctx.fillStyle = C.accent; ctx.fillText('■ your LED through the lens, ' + fmt(r.appW, 2) + '° wide', m.l, 12);
-    ctx.fillStyle = C.sun; ctx.fillText('┄ the sun, 0.53° wide', m.l + 230 > W ? m.l : m.l + 240, m.l + 230 > W ? 24 : 12);
-    $('#appText').textContent = 'Both shapes have equal area (the same total light). A narrower shape means a smaller source in the sky, so harder shadows and a sharper glare spot. The lens cannot make the LED look smaller than D÷f.';
+    ctx.beginPath(); ctx.moveTo(X(-hs), Y(ymin)); ctx.lineTo(X(-hs), Y(sunL)); ctx.lineTo(X(hs), Y(sunL)); ctx.lineTo(X(hs), Y(ymin)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+    let sum = 0, cnt = 0;
+    for (let b = 0; b < a.AB; b++) if (a.edges[b + 1] <= r.appW / 2 * 0.9) { sum += a.L[b]; cnt++; }
+    const ledL = cnt ? sum / cnt : 0;
+    $('#appText').innerHTML = '<span style="color:var(--accent)">■</span> Your LED from the wall centre: <b>' + fmt(r.appW, 2) + '° wide</b>, about <b>' + fmt(ledL) + ' Mcd/m²</b>. &nbsp; <span style="color:var(--sun)">┄</span> The sun: <b>0.53° wide</b>, <b>' + fmt(sunL) + ' Mcd/m²</b>.<br>Width sets how hard the shadows are. Height is how bright the source looks, and no lens can raise it above the LED’s own luminance' + (ledL > 0 ? ' (the sun is ' + fmt(sunL / ledL, 2) + '× brighter here)' : '') + '. Vertical scale is logarithmic.';
   }
   function renderProfiles() {
     const r = res; if (r.empty) return;
-    const P = r.prof, maxV = Math.max(Math.max.apply(null, P.exit), Math.max.apply(null, P.wall)) * 1.1 || 1;
-    area($('#profExit'), P.exit, P.RE, maxV, P.Hw); area($('#profWall'), P.wall, P.RW, maxV, P.HwWall);
+    const P = r.prof;
+    area($('#profExit'), P.exit, P.Hw); area($('#profWall'), P.wall, P.HwWall);
     $('#wallTitle').textContent = 'On the wall, ' + fmt(state.wall, 3) + ' mm away';
-    $('#profText').textContent = 'Height is the share of the LED’s light per millimetre, same scale on both. The beam gets wider with distance and its height drops by the same factor: the light is conserved, the irradiance is not. Dashed lines mark the edge that holds 99% of the light.';
+    $('#profText').textContent = 'Brightness (lux) against distance from the beam axis, drawn on both sides. Each chart has its own vertical scale, shown at the top left. The beam widens with distance and its brightness falls by the same factor: the light is conserved, the irradiance is not. Dashed lines mark the radius that holds 99.5% of the light.';
   }
-  function area(cv, vals, R, maxV, edge) {
-    const { ctx, W, H } = prep(cv), C = css(), m = { l: 10, r: 10, t: 10, b: 22 }, pw = W - m.l - m.r, ph = H - m.t - m.b, B = vals.length;
+  function area(cv, prof, edge) {
+    const { ctx, W, H } = prep(cv), C = css(), m = { l: 10, r: 10, t: 16, b: 22 }, pw = W - m.l - m.r, ph = H - m.t - m.b, B = prof.B, R = prof.R;
     ctx.clearRect(0, 0, W, H);
+    let maxV = 0; for (let b = 0; b < B; b++) maxV = Math.max(maxV, prof.E[b]); maxV = maxV * 1.1 || 1;
     const X = (y) => m.l + (y + R) / (2 * R) * pw, Y = (v) => m.t + ph - v / maxV * ph;
-    ctx.strokeStyle = C.line; ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textAlign = 'center';
+    ctx.strokeStyle = C.line; ctx.fillStyle = C.muted; ctx.font = '10.5px ' + C.mono; ctx.textAlign = 'center'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(m.l, m.t + ph + 0.5); ctx.lineTo(m.l + pw, m.t + ph + 0.5); ctx.stroke();
     const st = niceStep(R / 2);
     for (let y = -Math.floor(R / st) * st; y <= R + 1e-9; y += st) { ctx.fillText(fmt(y, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''), X(y), H - 6); ctx.beginPath(); ctx.moveTo(X(y), m.t + ph); ctx.lineTo(X(y), m.t + ph + 4); ctx.stroke(); }
     ctx.textAlign = 'right'; ctx.fillText('mm', W - 4, H - 6);
-    ctx.beginPath(); ctx.moveTo(X(-R), Y(0));
-    for (let b = 0; b < B; b++) { const y0 = -R + b * 2 * R / B, y1 = -R + (b + 1) * 2 * R / B; ctx.lineTo(X(y0), Y(vals[b])); ctx.lineTo(X(y1), Y(vals[b])); }
-    ctx.lineTo(X(R), Y(0)); ctx.closePath(); ctx.globalAlpha = 0.35; ctx.fillStyle = C.accent; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
+    ctx.textAlign = 'left'; ctx.fillText(fmtLux(maxV / 1.1).join(' ') + ' peak', m.l, 10);
+    ctx.beginPath(); ctx.moveTo(X(-prof.edges[B]), Y(0));
+    for (let b = B - 1; b >= 0; b--) { ctx.lineTo(X(-prof.edges[b + 1]), Y(prof.E[b])); ctx.lineTo(X(-prof.edges[b]), Y(prof.E[b])); }
+    for (let b = 0; b < B; b++) { ctx.lineTo(X(prof.edges[b]), Y(prof.E[b])); ctx.lineTo(X(prof.edges[b + 1]), Y(prof.E[b])); }
+    ctx.lineTo(X(prof.edges[B]), Y(0)); ctx.closePath();
+    ctx.globalAlpha = 0.35; ctx.fillStyle = C.accent; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1;
     ctx.strokeStyle = C.muted; ctx.setLineDash([4, 4]); [-edge, edge].forEach((e) => { ctx.beginPath(); ctx.moveTo(X(e), m.t); ctx.lineTo(X(e), m.t + ph); ctx.stroke(); }); ctx.setLineDash([]);
   }
 
@@ -421,25 +512,60 @@
     items.push('<b>More lenses never beat etendue.</b> Each glass surface loses about 4% to reflection, so extra lenses only pay off when one lens cannot collect and shape the light by itself. A short, wide first lens collects more, and a pair expands the beam to cut its angle. Try “Collimate, then expand”.');
     if (state.dome.on) items.push('<b>A dome is a first lens built into the LED.</b> It adds light extraction, but makes the source look ' + fmt(state.dome.n, 3) + '× wider and ' + fmt(state.dome.n * state.dome.n, 3) + '× dimmer to the lens behind it. A bigger apparent source means softer shadows for the same focal length.');
     if (state.lenses.some((L) => L.on && L.kind.indexOf('fresnel') === 0)) items.push('<b>Fresnel lenses are thin and cheap but leaky.</b> Light that hits a groove riser is lost or sent into stray angles. The tool estimates this from the groove height and ray angle, so real lenses can differ.');
+    const pi = r.prim;
+    if (pi) {
+      const shareRedir = r.fRedirect / Math.max(1e-9, r.fRedirect + r.fDirect) * 100;
+      if (pi.type === 'parab') items.push('<b>A flashlight reflector only works on wide-angle light.</b> It catches rays that leave the LED more than ' + fmt(pi.catchDeg, 3) + '° from the axis, which is ' + fmt(shareRedir, 1) + '% of the delivered light. The rest leaves straight out as spill. The LED is close to the mirror, so each point of it looks big from the beam and the hot spot stays soft. A longer focal length tightens the hot spot, a deeper mirror reduces the spill.');
+      if (pi.type === 'cone') items.push('<b>A straight wall bends every ray by the same step.</b> It narrows the beam but cannot collimate a Lambertian source cleanly. Compare it with the CPC of similar length: the CPC curves the wall so that every ray ends inside the design angle.');
+      if (pi.type === 'cpc') items.push('<b>The CPC is the etendue-optimal reflector.</b> Exit diameter × sin(angle) equals the LED diameter, so all the light ends inside ±' + fmt(pi.thetaDeg, 3) + '° and the beam centre reaches the limit set by the LED’s luminance. The price is length: ' + fmt(pi.fullLen) + ' mm for this LED and angle. Shorten it and the spread grows. This is a 2D slice, so skew rays in a real round CPC lose a little more.');
+      if (pi.type === 'tir') items.push('<b>A TIR collimator splits the job.</b> The centre surface is a lens for the ±' + fmt(pi.lensDeg, 3) + '° around the axis and the outer wall catches everything wider by total internal reflection, which has no mirror loss. Losses are the glass surfaces only. The wall is shaped for a point source, so a bigger LED relative to the cavity widens the beam.');
+    }
     ul.innerHTML = items.map((t) => '<li>' + t + '</li>').join('');
   }
 
   /* ---------- sweep ---------- */
+  function sweepDefs() {
+    const d = [], pr = state.prim, L0 = state.lenses[0];
+    const geo = (id, label, xl, get, apply, mn, mx) => d.push({ id: id, label: label, xl: xl, get: get, apply: apply, lo: Math.max(mn, get() / 4), hi: Math.min(mx, get() * 4) });
+    if (pr.type === 'parab') {
+      geo('p.fp', 'Reflector focal length', 'reflector f (mm)', () => pr.parab.fp, (q, x) => { q.prim.fp = x; }, 0.5, 100);
+      geo('p.rim', 'Reflector rim diameter', 'rim Ø (mm)', () => pr.parab.rim, (q, x) => { q.prim.rim = x; }, 8, 400);
+    } else if (pr.type === 'cone') {
+      geo('c.alpha', 'Cone wall tilt', 'wall tilt (°)', () => pr.cone.alpha, (q, x) => { q.prim.alpha = x; }, 0.5, 45);
+      geo('c.len', 'Cone length', 'length (mm)', () => pr.cone.len, (q, x) => { q.prim.len = x; }, 3, 400);
+    } else if (pr.type === 'cpc') {
+      geo('k.theta', 'CPC design half angle', 'half angle (°)', () => pr.cpc.theta, (q, x) => { q.prim.theta = x; }, 2, 45);
+      d.push({ id: 'k.len', label: 'CPC length', xl: 'length (% of full CPC)', get: () => pr.cpc.lenFrac * 100, apply: (q, x) => { q.prim.lenFrac = x / 100; }, lo: 12, hi: 100 });
+    } else if (pr.type === 'tir') {
+      geo('t.rc', 'TIR cavity radius', 'cavity radius (mm)', () => pr.tir.rc, (q, x) => { q.prim.rc = x; }, state.ledD * 0.55, 40);
+      geo('t.hc', 'TIR cavity height', 'cavity height (mm)', () => pr.tir.hc, (q, x) => { q.prim.hc = x; }, 1, 60);
+    }
+    if (L0.on) {
+      geo('f', 'Lens 1 focal length', 'focal length f₁ (mm)', () => L0.f, (q, x) => { q.lenses[0].f = x; }, 1, 3000);
+      geo('D', 'Lens 1 diameter', 'lens Ø D₁ (mm)', () => L0.D, (q, x) => { q.lenses[0].D = x; }, 1, 600);
+    }
+    geo('led', 'LED diameter', 'LED Ø (mm)', () => state.ledD, (q, x) => { q.ledD = x; }, 0.2, 60);
+    return d;
+  }
+  function syncSweepSelect(defs) {
+    const sel = $('#sweepVar'), key = defs.map((x) => x.id).join('|');
+    if (sel.dataset.key !== key) {
+      sel.innerHTML = ''; defs.forEach((x) => { const o = document.createElement('option'); o.value = x.id; o.textContent = x.label; sel.appendChild(o); });
+      sel.dataset.key = key;
+    }
+    if (!defs.some((x) => x.id === state.sweep)) state.sweep = defs[0].id;
+    sel.value = state.sweep;
+  }
   function runSweep() {
-    const p = params(), w = state.sweep, xs = [], M = 34;
-    let lo, hi;
-    if (w === 'f') { lo = Math.max(1, state.lenses[0].f / 5); hi = state.lenses[0].f * 5; }
-    else if (w === 'D') { lo = Math.max(1, state.lenses[0].D / 5); hi = state.lenses[0].D * 3; }
-    else { lo = Math.max(0.2, state.ledD / 4); hi = state.ledD * 4; }
-    for (let i = 0; i < M; i++) xs.push(lo * Math.pow(hi / lo, i / (M - 1)));
-    sweepData = { w: w, rows: E.sweep(p, w, xs, 3500) };
+    const defs = sweepDefs(); syncSweepSelect(defs);
+    const def = defs.find((x) => x.id === state.sweep), xs = [], M = 26, p = params();
+    for (let i = 0; i < M; i++) xs.push(def.lo * Math.pow(def.hi / def.lo, i / (M - 1)));
+    sweepData = { def: def, rows: E.sweep(p, def.apply, xs, 3000) };
     renderSweep();
   }
   function renderSweep() {
     if (!sweepData || !res) return;
-    const w = sweepData.w, rows = sweepData.rows, xs = rows.map((r) => r.x);
-    const cur = w === 'f' ? state.lenses[0].f : w === 'D' ? state.lenses[0].D : state.ledD;
-    const xl = w === 'f' ? 'focal length f₁ (mm)' : w === 'D' ? 'lens Ø D₁ (mm)' : 'LED Ø (mm)';
+    const def = sweepData.def, rows = sweepData.rows, xs = rows.map((r) => r.x), cur = def.get(), xl = def.xl;
     line($('#swEta'), xs, rows.map((r) => r.eta), { title: 'Light delivered (%)', xl: xl, mark: cur, my: res.empty ? 0 : res.eta3 * 100, ylog: false });
     line($('#swAng'), xs, rows.map((r) => r.ang), { title: 'Beam full angle (°)', xl: xl, mark: cur, my: res.beamFull, ylog: true });
     line($('#swLux'), xs, rows.map((r) => r.Ec), { title: 'Centre brightness (lx)', xl: xl, mark: cur, my: res.Ecenter, ylog: true, ref: SUN.lux, refL: 'sun 100 klx' });
@@ -480,7 +606,6 @@
   /* ---------- boot ---------- */
   function boot() {
     buildControls(); stageEvents(); syncAll();
-    $('#sweepVar').value = state.sweep;
     schedule();
     window.addEventListener('resize', () => { renderStage(); renderApparent(); renderProfiles(); renderSweep(); });
     if (window.ResizeObserver) new ResizeObserver(() => { renderStage(); }).observe($('#stage'));

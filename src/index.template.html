@@ -9,7 +9,7 @@
   --bg: #eef1f4; --panel: #ffffff; --panel2: #e6ebf0; --stage: #f8fafb;
   --ink: #14212b; --muted: #566877; --line: #d2dae1; --grid: #dfe5ea;
   --accent: #0b6f8e; --accent-ink: #ffffff; --sun: #b87800;
-  --glass: #2f86a8; --led: #ff8a1f;
+  --glass: #2f86a8; --led: #ff8a1f; --mirror: #6c7f8f;
   --good: #1c8a5a; --warn: #b3600a; --lost: #c43d28; --lost2: #8a3fb5;
   --r0: #e0401f; --r1: #e8830f; --r2: #b09600; --r3: #1c9582; --r4: #3a62d0;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -20,7 +20,7 @@
     --bg: #0a1117; --panel: #111b24; --panel2: #18252f; --stage: #070c11;
     --ink: #e5edf3; --muted: #8da1b1; --line: #233341; --grid: #15222c;
     --accent: #4fc1e0; --accent-ink: #06222b; --sun: #ffc83d;
-    --glass: #6cc3e3; --led: #ffb347;
+    --glass: #6cc3e3; --led: #ffb347; --mirror: #b4c4d1;
     --good: #4cc38a; --warn: #f0a23b; --lost: #ff6b5a; --lost2: #c58cf0;
     --r0: #ff5a36; --r1: #ffa133; --r2: #ece04a; --r3: #4fd0b4; --r4: #6f95ff;
     color-scheme: dark;
@@ -30,7 +30,7 @@
   --bg: #0a1117; --panel: #111b24; --panel2: #18252f; --stage: #070c11;
   --ink: #e5edf3; --muted: #8da1b1; --line: #233341; --grid: #15222c;
   --accent: #4fc1e0; --accent-ink: #06222b; --sun: #ffc83d;
-  --glass: #6cc3e3; --led: #ffb347;
+  --glass: #6cc3e3; --led: #ffb347; --mirror: #b4c4d1;
   --good: #4cc38a; --warn: #f0a23b; --lost: #ff6b5a; --lost2: #c58cf0;
   --r0: #ff5a36; --r1: #ffa133; --r2: #ece04a; --r3: #4fd0b4; --r4: #6f95ff;
   color-scheme: dark;
@@ -90,6 +90,8 @@ select { margin-top: 2px; }
 .chk { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 12.5px; cursor: pointer; }
 .ctl[hidden] { display: none !important; }
 #domeBox { margin-top: 6px; }
+#primBody { margin-top: 8px; }
+#primBody .ctl:first-child { margin-top: 0; }
 
 /* stage */
 .stage-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -136,7 +138,7 @@ ul.notes li { max-width: 80ch; }
 <div class="wrap">
 <header>
   <h1>Etendue Bench</h1>
-  <p>Trace a Lambertian LED through up to three lenses. Watch where the light goes, how sharp the beam gets, and why brightness stops growing.</p>
+  <p>Trace a Lambertian LED through a reflector or TIR optic and up to three lenses. Watch where the light goes, how sharp the beam gets, and why brightness stops growing.</p>
 </header>
 
 <div class="app">
@@ -167,16 +169,16 @@ ul.notes li { max-width: 80ch; }
       <div id="budget"></div>
     </section>
     <section class="card">
-      <h2>Source seen through the lens</h2>
-      <canvas class="chart" id="appChart" aria-label="Angular size of the LED as seen through the lens compared with the sun"></canvas>
+      <h2>Source seen from the wall</h2>
+      <canvas class="chart" id="appChart" aria-label="Angular size and luminance of the LED as seen from the wall compared with the sun"></canvas>
       <div id="appText" class="hint"></div>
     </section>
   </div>
 
   <section class="card">
-    <h2>Beam cross-section (2D slice)</h2>
+    <h2>Brightness across the beam</h2>
     <div class="pair">
-      <div><h3>Right after the last lens</h3><canvas class="chart" id="profExit" aria-label="Beam profile after the last lens"></canvas></div>
+      <div><h3>Right after the last optic</h3><canvas class="chart" id="profExit" aria-label="Beam profile after the last lens"></canvas></div>
       <div><h3 id="wallTitle">On the wall</h3><canvas class="chart" id="profWall" aria-label="Beam profile on the wall"></canvas></div>
     </div>
     <div id="profText" class="hint"></div>
@@ -204,7 +206,7 @@ ul.notes li { max-width: 80ch; }
   <section class="card">
     <h2>Rules of thumb from the numbers</h2>
     <ul class="notes" id="notes"></ul>
-    <p class="tiny" style="margin-top:10px">Method: meridional ray trace with Snell refraction and unpolarised reflection loss (Fresnel equations) at every glass surface. Efficiency, lux and luminance use a round LED and round lenses, estimated from the same rays. Sun reference: 100 klx, 0.53° across, 1.6 Gcd/m².</p>
+    <p class="tiny" style="margin-top:10px">Method: 3D skew-ray trace of the rotationally symmetric system with Snell refraction, unpolarised reflection loss (Fresnel equations) at every glass surface, total internal reflection and mirror absorption. The diagram shows one cross-section of those rays. Brightness is read at the wall as the average over a small central disc, and never above the etendue limit. Sun reference: 100 klx, 0.53° across, 1.6 Gcd/m².</p>
   </section>
 </main>
 
@@ -222,8 +224,22 @@ ul.notes li { max-width: 80ch; }
     <p class="hint mono" id="ledInfo"></p>
   </section>
 
+  <section class="card" id="primCard">
+    <h2>Reflector or TIR optic</h2>
+    <select id="primType" aria-label="Reflector or TIR optic"></select>
+    <div id="primBody" hidden>
+      <div id="primRho"></div>
+      <div id="primParab" hidden></div>
+      <div id="primCone" hidden></div>
+      <div id="primCpc" hidden></div>
+      <div id="primTir" hidden></div>
+      <p class="hint mono" id="primInfo"></p>
+      <p class="hint" id="primHelp"></p>
+    </div>
+  </section>
+
   <section class="card">
-    <h2>Lens material</h2>
+    <h2>Lens and TIR material</h2>
     <select id="material" aria-label="Lens material"></select>
   </section>
 
