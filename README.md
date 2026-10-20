@@ -1,5 +1,7 @@
 # Etendue Bench
 
+**Live demo: https://git67-67.github.io/etendue-bench/**
+
 Interactive 2D ray tracer for understanding etendue and conservation of radiance when collimating a Lambertian LED.
 
 Open `index.html` in a browser (no build step, no dependencies). It also works on GitHub Pages.
